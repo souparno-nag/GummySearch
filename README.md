@@ -62,3 +62,57 @@ Search according to name, description, topic
 4. **Add to Audience**
 Lets users add a subreddit to an existing audience or create a new one.
 (Upon creating new audience, suggests similar subreddits for the audience)
+
+#### Audience Analysis
+
+1. **Subreddits**
+Display all subreddits present within the audience.
+2. **Topics**
+Display all topics covered by all the subreddits within the audience.
+(Eg: The audience 'Side Hustles' may have the following topics:
+Hiring, Money, Remote Work, Referral, etc.)
+3. **Themes**
+Contains:
+    1. **Scoring themes**
+    Hot Discussion (Popular discussions that week), Top Content (Best performing content past month), etc.
+    2. **AI-tagged themes**
+    (Eg: The audience 'Side Hustle' may have Self Promotion, Oppurtunities, Money Talk, Pain & Anger, etc. as AI-tagged themes)
+4. **Ask**
+Allows users to ask questions relevant to the audience, for which AI will return posts related to the query.
+
+##### Exploring a theme during audience analysis
+
+Selecting any particular theme (scoring/ai-tagged) will display the subcategories (eg: Advice, Questions, Recommendations for the theme 'Advice Request' of audience 'Side Hustle'), topics and subreddits covered by the theme.
+It will also display a brief description of that theme.
+There should also be an option to display patterns found within the posts related to the theme.
+
+### Advanced Search
+
+This is used for searching for key words within specific audience(s).
+
+#### Options
+
+1. **Audience to search**
+Pre-formed audience or 'Anyone'
+2. **Keywords to look for**
+Define context for search
+3. **New/Top/Hot**
+4. **Limit**
+Number of results
+5. **Timeline**
+6. **Include/Excluse Users**
+7. **Individual Subreddits**
+8. **Enable/Disable Subreddits**
+9. **Disable Keywords**
+
+#### Results
+
+Displays posts, patterns and sentiments.
+
+### Content performance insights
+
+### Slack/Discord integration
+
+### Product reviews
+
+### Shareable AI reports
