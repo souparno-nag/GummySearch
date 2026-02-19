@@ -201,8 +201,6 @@ graph TD
 
 #### Folder Structure
 
-Here is the directory structure converted into a clean Markdown code block. You can copy and paste this directly into your documentation.
-
 ```markdown
 backend/
 ├── alembic/                        # DB migrations
