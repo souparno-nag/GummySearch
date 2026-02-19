@@ -1,1 +1,4 @@
+# Reddit
 praw
+# Python environment
+python-dotenv
