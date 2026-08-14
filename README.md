@@ -1,8 +1,10 @@
-# GummySearch
+# JammySearch
 
 ## Description
 
-GummySearch is a specialized tool which can be used for Reddit Intelligence and Social Listening. GummySearch aggregates specific communities and applies advanced filters to look for leads, pain points or content ideas.
+JammySearch is a specialized tool for Reddit Intelligence and Social Listening. It aggregates specific communities and applies advanced filters to surface the leads, pain points and content ideas buried beneath the raw posts.
+
+Engineering standards for this project are defined in `.specify/memory/constitution.md`, which takes precedence over this document where the two disagree.
 
 ## Features
 
@@ -45,6 +47,12 @@ Allows users to discover subreddits that are currently *trending* based on diffe
     3. **Growing**
     Filters subreddits based on highest growth in terms of number of members.
     Can be further filtered based on timeline (yearly, monthly, weekly growth) and size (1M+ members, 100k-1M members, 10k-100k members, 1k-10k members, etc.).
+
+> **Data cold start.** The Reddit API exposes a subreddit's *current* member count only — there is no
+> history endpoint. Growth trends and member/post line graphs therefore require JammySearch to snapshot
+> subreddit stats itself on a daily schedule and accumulate its own history. The snapshot task should
+> be built and left running early, well before the UI that consumes it, because the feature displays
+> nothing meaningful until weeks of data exist.
 
 #### Subreddits UI on Trending
 
@@ -109,19 +117,71 @@ Number of results
 
 Displays posts, patterns and sentiments.
 
-### Content performance insights
+### Keyword Alerts
 
-### Slack/Discord integration
+Standing rules that watch for specific language so a researcher does not have to re-run the same
+search every day. This is what makes lead-finding practical — someone publicly asking for what you
+sell is worth reaching within hours.
 
-### Product reviews
+1. **Rules**
+Keyword rules scoped to an audience, which can be paused, edited, and deleted. Evaluated against
+newly collected material rather than run on demand.
+2. **In-app matches**
+Matches are surfaced inside the application, identifying which rule matched and why. Outbound
+delivery — email, Slack, Discord — is deferred (see **Future Scope**).
+3. **Act in place**
+A matched post can be read in full, saved, and given a status without leaving the alert view.
 
-### Shareable AI reports
+### Saved posts and lead tracking
+
+Any post can be bookmarked with a private note and a status (new, contacted, dismissed), so what has
+already been acted on stays separable from what has not. This is personal workflow state, not a CRM —
+outreach itself happens elsewhere.
+
+### AI quality and cost transparency
+
+JammySearch treats its AI layer as measured engineering rather than as a black box. See constitution
+principles VII–IX for the binding rules; the user-visible parts are:
+
+1. **Cited answers**
+Every "Ask" response cites the specific posts it drew from, and explicitly declines to answer when
+retrieval turns up nothing relevant, rather than falling back on the model's general knowledge.
+2. **Cost and cache dashboard**
+Surfaces AI spend, token usage, latency, cache hit rate, and the number of Reddit API calls avoided
+by caching — per audience and in aggregate.
+3. **Published evaluation results**
+Theme tagging, sentiment scoring, and retrieval are scored against a labeled evaluation set committed
+to the repository, with a non-LLM baseline reported alongside the model for comparison.
+
+## Future Scope
+
+Deliberately **not** part of the current build. JammySearch is being built first as a portfolio project
+and as a personal market-research tool for a single user, so the following are deferred until there
+is a reason to add them:
+
+- **Billing and monetization** — Stripe integration, subscription tiers, plan gating, webhook
+  reconciliation, proration handling.
+- **Team workspaces** — multi-tenancy, shared audiences, role-based permissions. Until then JammySearch
+  is single-user, which keeps every query free of tenant scoping.
+- **Outbound integrations** — Slack and Discord webhooks, scheduled email digests.
+- **Shareable AI reports** — public report generation and hosting.
+- **Content performance insights** and **product reviews** — currently undefined; these need a
+  specification before they can be scoped.
+- **WebSocket live feed** — polling is sufficient at Reddit's posting rate; live push adds
+  infrastructure for negligible user benefit.
 
 ## Architecture
 
 ### Modular Architecture
 
-The project can be broken down into 6 distinct modules:
+The project can be broken down into 6 distinct modules. Modules 1–4 are the active build; modules 5
+and 6 are largely deferred (see **Future Scope**) beyond the minimum auth needed to sign in.
+
+JammySearch is deployed as a **modular monolith**, not as microservices. The module boundaries below are
+enforced in code — no module may query another's tables, and only module 1 may call Reddit — so
+individual modules can be extracted into services later if load ever justifies it. Until then, a
+single deployable is the correct choice for a project of this size, and the boundaries cost nothing
+to maintain.
 
 1. **Reddit Data Layer**
 This module is responsible for all communication with the Reddit API (PRAW / Reddit API). The rest of the modules do not speak to Reddit directly. They communicate with Reddit through this module.
@@ -136,10 +196,12 @@ Audiences are lists of subreddits grouped together based on different criterion.
 Consumes data from the Reddit Data Layer and serves it to the frontend in a unified, filterable format. Handles aggregated feed construction across multiple subreddits, advanced keyword search with Boolean support, filtering by timeline, post type, subreddit inclusion/exclusion, and user inclusion/exclusion. Also responsible for deduplication and cross-post detection.
 4. **AI & Analysis Engine**
 The intelligence layer. Responsible for theme tagging, topic extraction, sentiment analysis, pattern detection, comment-level analysis, and the "Ask" feature (RAG-based Q&A over audience posts). Calls out to an LLM (OpenAI / Anthropic) and manages prompt construction, response parsing, and result caching to avoid redundant inference costs.
-5. **Alerts, Notifications & Integrations**
-Handles all outbound communication — email digests, in-app notifications, Slack and Discord webhooks. Also manages keyword alert rules, brand mention tracking, and scheduling logic (cron jobs for digests and alert checks).
-6. **User & Workspace Management**
-Handles authentication, user profiles, subscription/billing tiers, team workspaces, bookmarks, internal notes, and shareable report generation. The gating layer — it decides what features each user has access to based on their plan.
+5. **Alerts, Notifications & Integrations** *(mostly deferred)*
+Manages keyword alert rules, brand mention tracking, and scheduling logic. In-app alerts are in
+scope; outbound channels — email digests, Slack and Discord webhooks — are deferred.
+6. **User & Workspace Management** *(minimal)*
+Handles authentication, user profiles, bookmarks and internal notes. Subscription tiers, plan gating,
+team workspaces, and shareable report generation are deferred; JammySearch is single-user for now.
 
 ### Overall Architecture
 
@@ -151,8 +213,8 @@ graph TD
 
     WebApp -- "HTTPS / REST + WebSocket" --> APIGateway
 
-    subgraph API_Gateway ["API Gateway"]
-        APIGateway["API Gateway; Auth middleware, Rate limiting; Request routing, Plan gating"]
+    subgraph API_Gateway ["API Layer"]
+        APIGateway["FastAPI app; Auth middleware, Rate limiting; Request routing"]
     end
 
     APIGateway --> Feed
@@ -160,11 +222,11 @@ graph TD
     APIGateway --> AI
     APIGateway --> Alerts
 
-    subgraph Microservices ["Microservices"]
+    subgraph Modules ["Application Modules (one deployable)"]
         Feed["Feed & Search"]
         Audience["Audience Mgmt"]
         AI["AI Engine"]
-        Alerts["Alerts & Notifs"]
+        Alerts["Alerts (future)"]
     end
 
     Feed --> RedditData
@@ -178,12 +240,10 @@ graph TD
 
     RedditData --> PostgreSQL
     RedditData --> Redis
-    RedditData --> Pinecone
 
     subgraph Storage ["Data Stores"]
-        PostgreSQL["PostgreSQL (Primary)"]
-        Redis["Redis (Cache)"]
-        Pinecone["Pinecone (Vectors)"]
+        PostgreSQL["PostgreSQL + pgvector; (Primary + Vectors)"]
+        Redis["Redis (Cache + Broker)"]
     end
 ```
 
@@ -195,9 +255,12 @@ graph TD
 - PRAW for Reddit API
 - Celery + Redis for the job queue
 - SQLAlchemy + Alembic for ORM and migrations
+- PostgreSQL with the `pgvector` extension as the vector store — no separate vector database, one
+  fewer service to run and one fewer index to keep in sync with the source of record
 - LangChain or LlamaIndex for the RAG/Ask pipeline
 - OpenAI SDK for embeddings and completions
 - Pydantic for data validation (already built into FastAPI)
+- pytest + pytest-asyncio for tests, ruff for lint and formatting
 
 #### Folder Structure
 
@@ -236,9 +299,11 @@ backend/
 │   │   ├── theme_service.py        # Theme tagging + topic extraction
 │   │   ├── sentiment_service.py    # Sentiment analysis per post/comment
 │   │   ├── ask_service.py          # RAG pipeline ("Ask" feature)
-│   │   ├── embedding_service.py    # Chunking + embedding posts → Pinecone
+│   │   ├── embedding_service.py    # Chunking + embedding posts → pgvector
 │   │   ├── pattern_service.py      # Pattern detection across posts
-│   │   └── prompts/                # Prompt templates (LangChain)
+│   │   ├── baseline.py             # Non-LLM extraction baseline for comparison
+│   │   ├── telemetry.py            # Per-call cost / latency / cache-hit records
+│   │   └── prompts/                # Versioned prompt templates (never inline)
 │   │       ├── theme_tagging.py
 │   │       ├── ask.py
 │   │       └── sentiment.py
@@ -273,7 +338,7 @@ backend/
 │   ├── celery_app.py               # Celery init + config
 │   ├── tasks/
 │   │   ├── ingest.py               # Fetch + cache Reddit posts per audience
-│   │   ├── embed.py                # Chunk + embed new posts into Pinecone
+│   │   ├── embed.py                # Chunk + embed new posts into pgvector
 │   │   ├── analyze.py              # Run AI analysis on new posts
 │   │   ├── alerts.py               # Evaluate alert rules against new posts
 │   │   └── digest.py               # Build + send scheduled email digests
@@ -282,6 +347,11 @@ backend/
 ├── tests/
 │   ├── unit/
 │   └── integration/
+│
+├── evals/                          # AI quality measurement (constitution IX)
+│   ├── datasets/                   # Labeled posts: themes, sentiment, Ask relevance
+│   ├── run_eval.py                 # Scores current prompts/models against datasets
+│   └── results/                    # Recorded scores per prompt + model version
 │
 ├── .env
 ├── requirements.txt
@@ -307,7 +377,7 @@ Task: ingest.py — fetch_audience_posts(audience_id)
         │
         ├── Chain → Task: embed.py — embed_new_posts(post_ids[])
         │             │
-        │             └── embedding_service → chunk + embed → Pinecone
+        │             └── embedding_service → chunk + embed → pgvector
         │
         ├── Chain → Task: analyze.py — analyze_new_posts(post_ids[])
         │             │
@@ -330,15 +400,21 @@ ask_service.py
         │
         ├── embedding_service → embed query → query vector
         │
-        ├── Pinecone → similarity search → top-K relevant post chunks
+        ├── pgvector → similarity search → top-K relevant post chunks
+        │
+        ├── Relevance gate → if below threshold, return "not enough material"
         │
         ├── Fetch full post context from PostgreSQL
         │
-        ├── LangChain → construct prompt with retrieved context
+        ├── LangChain → construct prompt (retrieved posts delimited as untrusted data)
         │
-        ├── OpenAI API → LLM completion
+        ├── LLM completion → temperature 0, pinned model, versioned prompt
         │
-        └── Return structured response (answer + source posts)
+        ├── Validate against Pydantic response schema
+        │
+        ├── Emit telemetry (tokens, cost, latency, cache hit, prompt version)
+        │
+        └── Return structured response (answer + cited source posts)
 ```
 
 #### API Structure
@@ -370,7 +446,12 @@ ask_service.py
   GET    /analysis/{audience_id}/topics
   GET    /analysis/{audience_id}/themes
   GET    /analysis/{audience_id}/themes/{theme_id}
-  POST   /analysis/{audience_id}/ask        # RAG "Ask" query
+  POST   /analysis/{audience_id}/ask        # RAG "Ask" query (cited, streamed)
+
+/ops
+  GET    /ops/usage                         # AI cost, tokens, latency, cache hit rate
+  GET    /ops/usage/{audience_id}           # Same, scoped to one audience
+  GET    /ops/quota                         # Reddit API calls used vs. saved by cache
 
 /subreddits
   GET    /subreddits/search                 # Subreddit discovery
@@ -385,10 +466,12 @@ ask_service.py
 /users
   GET    /users/me
   PATCH  /users/me
-  GET    /users/workspace
   POST   /users/bookmarks
   GET    /users/bookmarks
-  POST   /users/reports/{audience_id}       # Generate shareable report
+
+  # Future scope — not in the current build:
+  # GET  /users/workspace                   # Team workspaces
+  # POST /users/reports/{audience_id}       # Shareable report generation
 ```
 
 #### Infrastructure at a Glance
@@ -399,13 +482,13 @@ ask_service.py
 │         (Uvicorn + Gunicorn workers)            │
 └────────────────────┬────────────────────────────┘
                      │
-        ┌────────────┼────────────┐
-        │            │            │
-   PostgreSQL      Redis       Pinecone
-   (Primary DB)  (Cache +    (Vector store)
-                  Queue broker)
-        │            │
-        └────────────┘
+        ┌────────────┴────────────┐
+        │                         │
+   PostgreSQL                   Redis
+   (Primary DB +              (Cache +
+    pgvector store)            Queue broker)
+        │                         │
+        └────────────┬────────────┘
                 │
         Celery Workers
         (separate containers)
