@@ -36,7 +36,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 
 **Purpose**: Project initialization and tooling
 
-- [ ] T001 Create the backend, workers, tests, frontend, and evals directory tree per plan.md
+- [X] T001 Create the backend, workers, tests, frontend, and evals directory tree per plan.md
 - [ ] T002 Add FastAPI, PRAW, Celery, SQLAlchemy, Alembic, Pydantic, pgvector, and the LLM provider SDK to requirements.txt
 - [ ] T003 [P] Configure ruff lint and format rules in backend/pyproject.toml
 - [ ] T004 [P] Configure pytest, pytest-asyncio, and a hard-failing 80% service-layer coverage gate in backend/pyproject.toml so every run enforces Constitution IV rather than deferring it
