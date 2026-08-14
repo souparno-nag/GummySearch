@@ -3,9 +3,10 @@
 **Feature**: `001-reddit-audience-intelligence`
 **Date**: 2026-08-14
 
-This file is the source of truth for the HTTP surface. Per Constitution III, `README.md`'s API table
-MUST be updated in the same change set as any modification here, and every endpoint MUST declare
-Pydantic request and response models — returning bare dicts or ORM instances from a router is
+This file is the **single source of truth** for the HTTP surface. Per Constitution III, any change to
+that surface MUST update this file in the same change set, and the surface MUST NOT be documented in
+detail anywhere else — `README.md` links here rather than restating it. Every endpoint MUST declare
+Pydantic request and response models; returning bare dicts or ORM instances from a router is
 prohibited.
 
 ## Cross-cutting conventions
@@ -44,7 +45,13 @@ exception text never reach the client (Constitution V).
 **Freshness** — any response derived from collected material carries `last_refreshed_at` (FR-013).
 
 **Auth** — session-based, single user (R11). All endpoints require an authenticated session; there is
-no registration endpoint.
+no registration endpoint. Sessions expire and can be invalidated, and credentials are stored hashed,
+because the application is written to public-exposure standard even though it binds to loopback in
+this release (FR-078, FR-079).
+
+**Limits** — spend ceilings and request rate limits are enforced server-side on every endpoint that
+can trigger a paid call, never by the client (FR-080). A client that omits the check must not be able
+to exceed them.
 
 ---
 
@@ -79,6 +86,11 @@ Query parameters: `sort` (`new`, `top_today`, `top_week` — FR-009), `page`, `p
 Each item carries its source community (FR-008) and `flagged_adult` (FR-051). Cross-posts and
 verbatim reposts are collapsed before the page is assembled (FR-011).
 
+Posts purged after deletion at the source (FR-068) are excluded from feeds and search results
+entirely. `GET /posts/{id}` for a purged post returns `200` with `availability` set and no text —
+a tombstone rather than a `404` — so that a citation held by an existing answer or theme resolves to
+an explanation instead of breaking (see the corresponding edge case in the spec).
+
 ## Search — User Story 2
 
 | Method | Path | Purpose | Requirements |
@@ -90,10 +102,16 @@ Request carries: `scope` (`audience`, `all_saved`, `all_reddit` — FR-019, defa
 (FR-016), `include_communities` / `exclude_communities` (FR-017), `include_authors` /
 `exclude_authors` (FR-018).
 
-Response carries `scope_used`, and for saved-material scopes the detected `patterns` and `sentiment`
-(FR-020). For `all_reddit` the response sets `analysis_available: false` and `live: true`, and the
-client must surface that results are live, may be slower, and carry no analysis (FR-019, FR-020).
-`all_reddit` is exempt from SC-004's latency target.
+Response always carries `scope_used`, the matching posts, and `analysis_available`.
+
+For saved-material scopes, `analysis_available: true` means the response also carries the detected
+`patterns` and `sentiment` (FR-020). It is `false` — with a stated reason — when the interpretation
+capability has not been built yet, is failing, or the material has not been interpreted. The client
+MUST surface that reason; silently omitting analysis is prohibited.
+
+For `all_reddit`, `analysis_available` is always `false` and `live` is `true`; the client must
+surface that results are live, may be slower, and carry no analysis (FR-019, FR-020). `all_reddit` is
+exempt from SC-004's latency target.
 
 ## Analysis — User Story 3
 
@@ -112,6 +130,11 @@ response returns `trend_available: false` with the period length rather than a d
 All analysis responses carry `derived_from_comments` (FR-027b) and, when material is insufficient,
 `sufficient: false` with what is missing (FR-025).
 
+Every analysis response also carries an `analysis_state` block — `state` (`complete`, `partial`, or
+`none`), `items_done`, and `items_total` (FR-074). A `partial` state MUST be rendered as visibly
+incomplete; presenting partial results as final is prohibited, since the researcher cannot otherwise
+distinguish "this audience discusses three themes" from "we have analysed a third of it".
+
 ## Ask — User Story 4
 
 | Method | Path | Purpose | Requirements |
@@ -119,10 +142,20 @@ All analysis responses carry `derived_from_comments` (FR-027b) and, when materia
 | `POST` | `/audiences/{id}/ask` | Ask a question; streamed response | FR-028 – FR-032 |
 | `GET` | `/audiences/{id}/ask/{turn_id}` | Retrieve a past answer with citations | FR-029 |
 
-Streamed per Constitution VI and FR-031. Every non-refused answer carries a non-empty `citations`
-array, each referencing a post that can be opened in full (FR-029). When retrieval falls below the
-relevance threshold the response sets `refused: true` with a plain explanation and no answer body
-(FR-030) — answering from general knowledge is prohibited.
+Streamed per Constitution VI and FR-031. Every response carries `outcome`, which is one of:
+
+| `outcome` | Meaning | Body |
+|---|---|---|
+| `answered` | Retrieval met the threshold and an answer was produced | Answer text plus a non-empty `citations` array, each openable in full (FR-029) |
+| `refused` | Fewer than the required number of passages cleared the similarity floor (FR-076) | Plain explanation, no answer text — answering from general knowledge is prohibited (FR-030) |
+| `failed` | The provider errored or timed out mid-answer (FR-075) | Failure explanation; any partial text is discarded, not shown or stored |
+
+`refused` and `failed` MUST NOT be collapsed into a single error state. A refusal is the system
+working correctly; a failure is the provider breaking. Conflating them corrupts the SC-007 refusal
+measurement by counting outages as correct refusals.
+
+Refusal responses also carry `passages_above_floor` so the decision can be audited against the
+threshold that produced it.
 
 ## Alerts — User Story 5
 
@@ -135,8 +168,19 @@ relevance threshold the response sets `refused: true` with a plain explanation a
 | `GET` | `/alerts/matches` | Matches, grouped so one post appears once | FR-058 |
 | `POST` | `/alerts/matches/{id}/read` | Mark seen | FR-058 |
 
-Match responses list every rule a post matched and the `matched_terms` that fired (FR-058), and
-embed enough post content to be actionable in place (FR-062). A rule matching an unusually high share
+Rule requests carry `match_mode` (`keyword`, `intent`, or `both`), `keywords`, `intent_text`, and an
+optional `similarity_threshold` (FR-082–FR-084). Validation rejects a rule missing the fields its mode
+requires.
+
+Rule responses carry `intent_matching_active` — false when the retrieval capability is unavailable or
+the rule's intent has not been embedded yet. A rule in that state still evaluates keywords, and the
+client MUST surface the degraded status rather than presenting the rule as fully operational
+(FR-085).
+
+Match responses list every rule a post matched and the `matched_terms` that fired (FR-058), plus
+`matched_mode` and, for intent matches, `similarity` — so a surprising match can be judged and the
+rule's threshold raised rather than the feature being written off. They embed enough post content to
+be actionable in place (FR-062). A rule matching an unusually high share
 of material returns `matching_broadly: true` so the client can offer to narrow it (FR-060). A rule
 whose audience contains an unavailable community still evaluates and reports
 `degraded_communities` (FR-061).
@@ -176,16 +220,18 @@ Bookmarks of posts removed at the source return captured content with `source_av
 | `GET` | `/ops/quota` | Reddit calls used versus avoided by caching | FR-045 |
 | `GET` | `/ops/limits` | Current spend ceilings and consumption against them | FR-046 |
 | `GET` | `/ops/evaluation` | Published accuracy against the labeled reference set | FR-047, SC-008 |
+| `GET` | `/ops/retrieval-settings` | Current minimum passage count and similarity floor | FR-076 |
+| `GET` | `/ops/backups` | Last backup time, retention window, last verified restore | FR-070, FR-071 |
+| `GET` | `/ops/freshness` | Last collection and last availability re-check per audience | FR-013, FR-067 |
 
 When a spend ceiling is reached, the analysis and Ask endpoints return `429` with code
 `spend_limit_reached` and a clear explanation rather than continuing to spend (FR-046).
 
 ---
 
-## README synchronization required
+## Documentation rule
 
-`README.md`'s API table predates this contract and must be brought into line in the same change set
-(Constitution III). Differences: `/alerts` expands to `/alerts/rules` and `/alerts/matches`;
-`/bookmarks` gains status filtering and `PATCH`; `/ops` gains `/limits` and `/evaluation`;
-`/audiences/curated` becomes `/audiences/starter` with an explicit copy endpoint; and the deferred
-`/users/workspace` and `/users/reports` entries stay commented out.
+This file is the only place the HTTP surface is described in detail. `README.md` carries a link and a
+one-paragraph overview; it MUST NOT reproduce routes, request shapes, or response shapes. Constitution
+III (v1.2.3) forbids maintaining the same API surface in two locations, because duplicated API
+documentation reliably drifts and a drifted API document is worse than none.

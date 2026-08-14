@@ -22,6 +22,29 @@ what they collectively discuss, and no way to ask a question of a community's ac
 Scope for this specification is the single-user product described in `README.md` under Features. The
 items listed in the README's **Future Scope** section are explicitly out of scope here.
 
+## Clarifications
+
+### Session 2026-08-14
+
+- Q: When someone deletes their Reddit post or comment, what should JammySearch do with the copy it
+  already collected? → A: Purge it from the general corpus, but keep copies the user explicitly
+  bookmarked, on the reasoning that those are private saved records that are never republished.
+- Q: If the database were lost tomorrow, how much of the collected history would be acceptable to
+  lose? → A: At most one day. A full nightly backup is written outside the application container and
+  retained on a rolling window.
+- Q: When the AI provider fails partway through analysing a batch of posts, what should happen? → A:
+  Process in chunks and commit each as it succeeds; on failure, stop, record the resume point, and
+  show the audience as explicitly incomplete rather than as finished.
+- Q: How should the system decide it lacks enough relevant material to answer a question? → A:
+  Require at least a configured minimum number of retrieved passages above a configured similarity
+  floor, with both values tuned against the labelled unanswerable questions in the evaluation set.
+- Q: Where will the application be reachable from once running? → A: Local machine only in this
+  release, but built so that later public exposure requires configuration rather than rework — no
+  shortcut may depend on the local-only assumption. Clarified further: the application *code* is
+  written as though it will be public; the *deployment* apparatus that costs money or operational
+  effort (transport security, abuse protection, monitoring) is deliberately not built now, because
+  none of it requires code changes to add later.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Build an audience and read its feed (Priority: P1)
@@ -160,7 +183,7 @@ and confirm the system declines rather than answering.
    language, **Then** they receive an answer drawn from posts in that audience.
 2. **Given** an answer, **When** it is displayed, **Then** every answer cites the specific posts it
    was derived from, and each citation can be opened to read the source post in full.
-3. **Given** a question for which the audience contains no sufficiently relevant material, **When**
+3. **Given** a question whose retrieval does not meet the relevance threshold (FR-076), **When**
    the researcher asks it, **Then** the system states that it does not have enough relevant material
    to answer, and does not answer from general knowledge.
 4. **Given** a question that takes time to answer, **When** the researcher submits it, **Then** they
@@ -175,7 +198,10 @@ and confirm the system declines rather than answering.
 A researcher who is looking for a particular kind of post — someone asking for a tool like theirs,
 someone naming a competitor, someone describing a problem they solve — writes a rule for it once and
 is told inside the application whenever newly collected material matches, instead of re-running the
-same search every morning.
+same search every morning. Because the same intent gets expressed in wildly different words, a rule
+can match on meaning rather than on literal keywords — someone writing "anyone know a tool that
+watches subreddits for me?" should be caught by a rule about Reddit monitoring without the researcher
+having to anticipate that exact phrasing.
 
 **Why this priority**: This converts the product from something a researcher visits into something
 that works while they are not looking, and it is what makes finding sales leads practical — a person
@@ -205,6 +231,13 @@ post attached — and that a non-matching post is not.
 6. **Given** a rule whose audience includes a community that has become unavailable, **When**
    evaluation runs, **Then** the rule continues to work across the remaining communities and the
    researcher is told which one is no longer contributing.
+7. **Given** a rule that describes an intent rather than listing keywords, **When** a post expresses
+   that intent in wording the rule never mentions, **Then** the post is matched, and the match states
+   that it was found by meaning rather than by a literal term.
+8. **Given** meaning-based matching is unavailable — the retrieval capability is not yet built, is
+   failing, or the material has not been processed for it — **When** evaluation runs, **Then**
+   keyword matching continues to work and the researcher is told that meaning-based matching is not
+   currently active, rather than silently receiving fewer matches.
 
 **Note**: Alerts in this release are surfaced inside the application only. Outbound delivery — email,
 Slack, Discord — remains out of scope per the README.
@@ -216,7 +249,7 @@ Slack, Discord — remains out of scope per the README.
 A researcher who does not yet know which communities matter browses for them: searching by name,
 description, or topic; sorting by size, by activity, or by growth; filtering to a size band; reading
 at-a-glance tags that say how big, how new, and how active a community is; and viewing how a
-community's membership and posting volume have changed over time. They can also browse ready-made
+community's membership and posting volume have changed over time. They can also browse starter
 audiences rather than assembling one from scratch, and when they create a new audience they are
 offered similar communities to add.
 
@@ -244,7 +277,7 @@ results.
 6. **Given** a community in the results, **When** the researcher adds it to an audience, **Then** they
    can add it to an existing audience or create a new one, and on creating a new one they are offered
    similar communities to include.
-7. **Given** the ready-made audiences list, **When** the researcher browses it, **Then** they can
+7. **Given** the starter audiences list, **When** the researcher browses it, **Then** they can
    inspect what communities each contains and save a copy as their own editable audience.
 
 ---
@@ -318,8 +351,15 @@ time for that audience.
   is told if the audience exceeds the supported size.
 - **Source is unavailable or refusing requests** — previously collected material remains browsable and
   the researcher is told that the data is not current rather than shown an empty product.
-- **Post is deleted, removed by moderators, or edited** after being collected — the researcher sees
-  what was captured, marked with its current status at the source.
+- **Post is deleted or removed by moderators** after being collected — its text is purged from the
+  general corpus on the next availability re-check, while its non-content metadata remains so counts
+  and trends are unaffected. If the researcher had bookmarked it, their private copy survives and is
+  marked as no longer available at the source.
+- **Post is edited** after being collected — the researcher sees what was captured, marked with its
+  current status at the source.
+- **A purged post is still cited by an existing answer or theme** — the citation resolves to a
+  tombstone stating the material is no longer available, rather than breaking or silently vanishing
+  from the record of what the analysis was based on.
 - **Author's account is deleted** — posts remain attributable to a deleted account without breaking
   author-based filtering.
 - **Same content cross-posted** across several communities in one audience, or reposted verbatim by
@@ -328,6 +368,9 @@ time for that audience.
   is told the result set was truncated.
 - **Ask question is nonsensical, empty, or unrelated** to the audience — the system declines clearly
   rather than producing a confident irrelevant answer.
+- **A question retrieves one strong match and nothing else** — it is refused, because a single
+  passage does not meet the minimum count in FR-076. One incidental keyword match must not be enough
+  to carry an otherwise unsupported answer.
 - **Ask question would require material outside the audience** — the system says so instead of
   answering from general knowledge.
 - **Content retrieved from the source attempts to manipulate the analysis** by containing
@@ -349,8 +392,24 @@ time for that audience.
   and over; they can see which rules it matched.
 - **An alert rule never matches anything** — the researcher can tell the rule is active but idle,
   rather than being unable to distinguish "nothing matched" from "not running".
+- **An intent rule matches something the researcher considers irrelevant** — the match shows that it
+  was found by meaning and how close it was, so the researcher can raise the rule's threshold rather
+  than concluding the feature is broken.
+- **An intent rule is created before the retrieval capability exists** — the rule is accepted and its
+  keyword portion works immediately; the researcher is told intent matching will begin once retrieval
+  is available, rather than the rule appearing to work while matching nothing.
 - **Collection was interrupted for part of a trend period** — the gap is visible in any trend shown,
   so a drop in collected volume is not mistaken for a drop in discussion.
+- **The database is lost or corrupted** — recovery restores the most recent nightly backup. Up to a
+  day of collection is lost; the community snapshot series shows a one-day gap that cannot be
+  backfilled, and any posts that have since fallen outside what the source will serve are gone.
+- **The AI provider is unavailable, slow, or rate-limiting** during a batch analysis — completed
+  chunks are kept, the audience is marked as partially analysed with the proportion done, and the run
+  resumes from its recorded position rather than starting over.
+- **The AI provider fails midway through answering a question** — the researcher is told the answer
+  could not be completed, and the partial text is neither shown as an answer nor saved as one.
+- **The application is started bound to a non-local interface without the explicit exposure setting**
+  — it refuses to start and explains why, rather than silently becoming reachable from the network.
 
 ## Requirements *(mandatory)*
 
@@ -371,7 +430,7 @@ everything that follows them.
 - **FR-004**: The system MUST prevent an audience from containing the same community twice.
 - **FR-005**: The system MUST enforce a documented maximum number of communities per audience and tell
   the user when they reach it.
-- **FR-006**: The system MUST ship with a fixed set of ready-made audiences, authored and maintained
+- **FR-006**: The system MUST ship with a fixed set of **starter audiences**, authored and maintained
   as part of the product, which a user can inspect and save as their own editable copy. Saving a copy
   MUST NOT alter the original, and later changes to a shipped audience MUST NOT alter copies a user
   has already saved.
@@ -409,10 +468,12 @@ everything that follows them.
   The system MUST make clear which scope is active, and MUST state, when the all-of-Reddit scope is
   selected, that results are retrieved live, may be slower, and are subject to the source's own
   limits.
-- **FR-020**: Search results over saved material MUST present the matching posts along with the
-  patterns and overall sentiment detected across them. Results from the all-of-Reddit scope MUST
-  present the matching posts and MUST state that pattern and sentiment analysis is not available for
-  them.
+- **FR-020**: Search results MUST always present the matching posts. When the interpretation
+  capability is available, results over saved material MUST additionally present the patterns and
+  overall sentiment detected across them. When it is not — because it has not been built yet, is
+  failing, or the material has not been interpreted — results MUST state that analysis is unavailable
+  rather than silently omitting it. Results from the all-of-Reddit scope never carry analysis and
+  MUST say so.
 
 #### Analysis
 
@@ -431,6 +492,15 @@ everything that follows them.
   same point repeatedly.
 - **FR-055**: The system MUST state the period any trend covers, and MUST NOT present a direction of
   travel when the collected period is too short to support one.
+- **FR-072**: Analysis MUST process material in chunks, committing each chunk's results before
+  beginning the next, so that an interruption costs at most the chunk in progress.
+- **FR-073**: When analysis is interrupted, the system MUST record how far it got and resume from
+  that point on the next attempt. Material already analysed MUST NOT be re-analysed or re-charged.
+- **FR-074**: An audience whose analysis is incomplete MUST be presented as incomplete, stating how
+  much of its material has been analysed, rather than showing partial results as though they were
+  complete.
+- **FR-075**: A question that fails partway through being answered MUST surface the failure. A
+  truncated answer MUST NOT be presented as a finished one, and MUST NOT be stored as though it were.
 - **FR-025**: The system MUST state when an audience holds too little material for analysis to be
   meaningful, rather than presenting weak results as confident ones.
 - **FR-026**: Repeating an analysis over unchanged material MUST return the same result and MUST NOT
@@ -449,8 +519,14 @@ everything that follows them.
 - **FR-028**: Users MUST be able to ask a plain-language question scoped to a single audience.
 - **FR-029**: Every answer MUST cite the specific posts it was derived from, and each citation MUST be
   openable to read the source post.
-- **FR-030**: The system MUST decline to answer when the audience holds no sufficiently relevant
-  material, and MUST NOT answer from knowledge outside the audience's collected posts.
+- **FR-030**: The system MUST decline to answer when retrieval does not meet the relevance threshold
+  defined in FR-076, and MUST NOT answer from knowledge outside the audience's collected posts.
+- **FR-076**: The decision to answer or refuse MUST be made by requiring at least a configured
+  minimum number of retrieved passages scoring above a configured similarity floor. Both the minimum
+  count and the floor MUST be configurable, and their current values MUST be discoverable.
+- **FR-077**: The minimum count and similarity floor MUST be tuned against the labelled unanswerable
+  questions in the evaluation set. Changing either value counts as a retrieval change and MUST be
+  accompanied by an evaluation run with before-and-after scores.
 - **FR-031**: The system MUST show progress or partial output while an answer is being produced.
 - **FR-032**: The same question asked twice against unchanged material MUST produce consistent
   answers.
@@ -474,6 +550,19 @@ everything that follows them.
   and settable to a status — without leaving the alert view.
 - **FR-063**: Alerts MUST be surfaced inside the application only. Outbound delivery channels are out
   of scope for this release.
+- **FR-082**: Users MUST be able to define a rule by describing the intent they are watching for, and
+  the system MUST match material expressing that intent even when it shares no keyword with the
+  rule's wording.
+- **FR-083**: Each rule MUST declare its matching mode — literal keywords, intent, or both — and each
+  recorded match MUST state which mode produced it, so the researcher can tell why a post was
+  surfaced and can judge whether to trust it.
+- **FR-084**: Intent matching MUST use a configurable similarity threshold whose current value is
+  discoverable, tuned against a labelled set of intent paraphrases. Changing it counts as a retrieval
+  change and MUST be accompanied by an evaluation run.
+- **FR-085**: Intent matching MUST degrade gracefully. When the retrieval capability is unavailable or
+  material has not yet been prepared for it, keyword matching MUST continue unaffected and the
+  researcher MUST be told that intent matching is not currently active. A rule MUST NOT silently
+  return fewer matches than it otherwise would.
 
 #### Community discovery
 
@@ -506,6 +595,20 @@ everything that follows them.
 - **FR-066**: Status and notes MUST be private to the user and MUST NOT be transmitted to the source or
   be visible to anyone else.
 
+#### Deletion at the source
+
+- **FR-067**: The system MUST re-check the availability of previously collected material on a
+  recurring schedule, so that deletions and moderator removals are detected in the background rather
+  than only when a user happens to open the item.
+- **FR-068**: On detecting that a post or comment has been deleted or removed at the source, the
+  system MUST purge its captured text — including any derived representations used for retrieval —
+  from the general corpus, while retaining the non-content metadata (identifier, timestamps,
+  engagement figures, source community) that counts and trends depend on.
+- **FR-069**: Material the user has explicitly bookmarked is exempt from FR-068 and remains readable
+  from its captured text per FR-043, marked as no longer available at the source. Exempt copies MUST
+  remain private to the user, MUST NOT be republished, shared, or exported to any third party, and
+  MUST be destroyed if the bookmark is deleted.
+
 #### Transparency and limits
 
 - **FR-044**: The system MUST report the cost, volume processed, and response times of automated
@@ -528,6 +631,27 @@ everything that follows them.
 - **FR-051**: The system MUST flag posts marked as adult or graphic at the source before the user
   opens them.
 - **FR-052**: Errors shown to users MUST state what failed and what the user can do next.
+- **FR-070**: The system MUST produce a complete backup of its stored data on a daily schedule,
+  written to storage outside the application container, and MUST retain a rolling window of those
+  backups rather than only the most recent one.
+- **FR-071**: The restore procedure MUST be documented and MUST have been performed successfully at
+  least once against a real backup. A backup that has never been restored is not evidence of
+  recoverability.
+- **FR-078**: The application MUST bind to the local machine by default and MUST NOT be reachable
+  from a public network in this release. Exposing it beyond the local machine MUST require an
+  explicit configuration change rather than being possible by accident.
+- **FR-079**: Credential storage, session handling, and secret management MUST be built to a standard
+  that would remain sound under public exposure. No measure may rely on the local-only assumption —
+  stored credentials are hashed, sessions expire and can be invalidated, and secrets never appear in
+  responses, logs, or anything the client can read.
+- **FR-080**: Spend ceilings (FR-046) and request rate limits MUST be enforced on the server as
+  controls in their own right, never as interface conveniences, so that they remain effective if the
+  deployment is later exposed.
+- **FR-081**: The following are explicitly NOT required in this release, because each sits at the
+  deployment layer and can be introduced without changing application code: transport security and
+  certificates, network-level abuse or brute-force protection, external uptime and security
+  monitoring, and hardened hosting. Building them now is out of scope, and their absence MUST NOT be
+  compensated for by weakening FR-079 or FR-080.
 
 ### Key Entities
 
@@ -536,9 +660,11 @@ everything that follows them.
 - **Community Snapshot**: A recording of one community's statistics at a point in time. Accumulating
   these is what makes growth and history views possible.
 - **Audience**: A user-named group of communities, treated as a single unit for reading, searching,
-  and analysis. Either user-created or a saved copy of a ready-made one.
+  and analysis. Either user-created or a saved copy of a starter audience.
 - **Post**: A single piece of content collected from a community, with its title, body, author,
-  timestamp, engagement figures, source community, and current availability at the source.
+  timestamp, engagement figures, source community, and current availability at the source. When it
+  becomes unavailable at the source, the text is purged and the remaining non-content fields persist
+  as a record that it existed, so historical counts stay stable.
 - **Comment**: A top-level reply to a post that met the engagement threshold, with its text, author,
   timestamp, and engagement figures. Contributes to analysis alongside posts.
 - **Topic**: A subject discussed across an audience, derived from its posts and their collected
@@ -549,10 +675,13 @@ everything that follows them.
 - **Pattern**: A recurring observation detected across the posts of a theme or a search result.
 - **Question and Answer**: A user's plain-language question about an audience, the answer produced,
   and the posts cited as its support.
-- **Alert Rule**: A user's standing keyword rule scoped to an audience, which can be active or paused,
-  and which is evaluated against newly collected material rather than run on demand.
+- **Alert Rule**: A user's standing rule scoped to an audience, which can be active or paused, and
+  which is evaluated against newly collected material rather than run on demand. It carries a
+  matching mode — literal keywords, an intent description, or both — and, for intent matching, a
+  similarity threshold.
 - **Alert Match**: A record that a particular post satisfied a particular rule, and when — retained
-  independently of the rule that produced it.
+  independently of the rule that produced it. Records which matching mode fired and, for intent
+  matches, how close the match was.
 - **Bookmark**: A user's saved post, with captured content, an optional private note, and a status
   recording where the researcher has got to with it.
 - **Usage Record**: A record of the cost, volume, response time, and reuse of one unit of automated
@@ -593,11 +722,31 @@ everything that follows them.
   distinct authors behind it are reachable within two interactions from the analysis view.
 - **SC-016**: A researcher can tell, for any saved post, whether they have already acted on it,
   without opening it.
+- **SC-017**: Text of material deleted at the source is purged from the general corpus within 24
+  hours of the deletion being detected, and no purged text appears in any feed, search result, or
+  analysis output thereafter.
+- **SC-018**: A total loss of the running database can be recovered from backup with no more than 24
+  hours of collected material lost, demonstrated by an actual restore rather than by the existence of
+  a backup file.
+- **SC-019**: After an interrupted analysis run is resumed, the material analysed before the
+  interruption is not analysed again and incurs no further cost, verified across 100% of resumed
+  runs.
+- **SC-020**: Making the application reachable beyond the local machine requires only a configuration
+  change and no code change, demonstrated by binding it to a non-local interface in a test
+  environment.
+- **SC-021**: An intent-based rule matches at least 70% of held-out paraphrases of that intent, while
+  matching no more than 10% of unrelated control posts, measured against a labelled paraphrase set.
 
 ## Assumptions
 
 - **Single user.** Per the README's Future Scope, there is no team, no sharing, no roles, and no
   subscription tiers. Sign-in exists to protect one person's data, not to separate tenants.
+- **Local deployment, code written for eventual exposure.** The application runs on the local machine
+  only in this release. The dividing line is cost: measures that live in application code and are
+  cheaper to do correctly the first time — hashed credentials, expiring sessions, secrets kept out of
+  responses and logs, server-side limits — are required now and cost effectively nothing. Measures
+  that live in the deployment and carry real monetary or operational cost — transport security, abuse
+  protection, monitoring — are deferred, because adding them later requires no code rework.
 - **Public communities only.** Private and restricted communities cannot be tracked; the product only
   reads content that is publicly visible.
 - **Maximum audience size of 50 communities** is assumed for FR-005 in the absence of a stated limit.
@@ -617,6 +766,10 @@ everything that follows them.
 - **Lead status is personal workflow state, not customer relationship management.** It records where
   the researcher has got to with a post. Contact history, pipelines, and outreach itself stay outside
   the product.
+- **Backups protect against loss of the running system, not against gaps in the source.** The source
+  will not serve a community's history beyond its own listing limits, so material that was never
+  collected — or that was lost and has since aged out — cannot be recovered by any means. This is why
+  the corpus is treated as irreplaceable rather than as a cache that can be rebuilt on demand.
 - **Topic and theme trends inherit the same cold start as community growth.** A direction of travel
   cannot be shown until material has been collected across enough of a period to establish one, and
   the product says so rather than drawing a slope through too few points.

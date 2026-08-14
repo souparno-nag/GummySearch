@@ -239,6 +239,143 @@ inverts Constitution IX's regression gate and means the first prompt change ship
 
 ---
 
+## R13. Deletion detection and purge
+
+**Decision**: A scheduled re-check task in `app/reddit/availability.py` re-fetches previously
+collected items in age-ordered batches and compares availability. On detecting a deletion or removal,
+purge the text from `Post`/`Comment` and delete the corresponding `ContentChunk` rows, while
+retaining non-content fields as a tombstone. Bookmarked items are exempt and keep their captured copy
+(FR-069).
+
+**Rationale**: FR-067 requires detection in the background rather than at read time, because a
+researcher who never opens an item would otherwise never trigger the purge. Retaining non-content
+metadata keeps `DiscussionBucket` denominators stable — deleting the row outright would silently
+rewrite history and make a past week's trend change after the fact. Deleting the chunks matters as
+much as purging the text: a vector derived from removed content is still derived from it.
+
+**Alternatives considered**: Purging at read time when an item is opened — rejected, it leaves
+removed content in the retrieval index indefinitely. Deleting rows entirely — rejected, it corrupts
+historical counts and trends. Re-checking everything on every cycle — rejected as quota-prohibitive;
+age-ordered batching spends the quota where deletions are most likely.
+
+---
+
+## R14. Backup and restore
+
+**Decision**: A nightly `pg_dump` written to a volume outside the application container, retained on
+a rolling window, run as a Celery Beat task in `workers/tasks/backup.py`. A separate, less frequent
+verification step restores the most recent dump into a scratch database and asserts row counts on the
+irreplaceable tables.
+
+**Rationale**: SC-018 sets a 24-hour recovery point objective, and FR-071 requires the restore to
+have actually been performed — an untested backup is a belief, not a control. The verification step
+exists because the common failure is not a missing dump but an unusable one. Excluding the embeddings
+table is the designated escape valve if dump size becomes a problem, since embeddings are the only
+large component that is deterministically regenerable from text that is retained.
+
+**Alternatives considered**: Continuous write-ahead-log archiving — rejected, its tighter recovery
+window does not justify the operational surface for a single-user tool. Backing up only snapshots and
+bookmarks — rejected on inspection: the source will not serve a community's history beyond its
+listing limits, so the post corpus is substantially irreplaceable too, and both embeddings and
+persisted inference results cost real money to regenerate.
+
+---
+
+## R15. Chunked, resumable analysis
+
+**Decision**: `app/ai/runner.py` processes analysis in fixed-size chunks, committing each chunk's
+results in its own transaction and advancing a persisted cursor on an `AnalysisRun` record. On
+failure the run is marked interrupted with its cursor intact; the next attempt resumes from there.
+Audiences expose their completion proportion so partial state is visible rather than implied.
+
+**Rationale**: FR-072–FR-074 require exactly this shape. The cursor is what separates "resume" from
+"restart", and Constitution VII's inference cache — keyed on content hash, prompt version, and model
+identifier — is what guarantees the no-double-charge property in FR-073 even if a chunk is retried
+after partial success. Surfacing completion proportion is what stops a half-analysed audience from
+being read as a fully analysed one with fewer themes.
+
+**Alternatives considered**: All-or-nothing transactions per run — rejected, one late failure discards
+the whole run's spend. Skip-and-continue leaving holes — rejected, it produces silently incomplete
+analysis, which is worse than visibly incomplete analysis. Unbounded retry with backoff — rejected as
+the primary strategy since it burns spend during a real outage, though bounded retry within a chunk
+remains appropriate for transient errors.
+
+---
+
+## R16. Retrieval refusal threshold
+
+**Decision**: Refusal is decided by a deterministic gate in `app/ai/retrieval.py`: answer only when at
+least *N* retrieved passages score above a similarity floor *F*. Both are configuration values,
+exposed through `/ops`, and tuned against the labelled unanswerable questions in the evaluation set.
+Changing either is a retrieval change and triggers the Constitution IX regression gate.
+
+**Rationale**: FR-076 and FR-077 require this to be measurable rather than emergent. Requiring
+multiple supporting passages rather than one strong match is what prevents a single incidental
+keyword hit from carrying an unsupported answer — the failure mode SC-007 exists to measure. Keeping
+the gate deterministic means refusal behaviour is reproducible and testable, which a model
+self-assessment would not be.
+
+**Alternatives considered**: A single top-score cutoff — rejected as brittle across differently worded
+questions. Asking the model whether the material answers the question — rejected as non-deterministic
+and weakest precisely where the model is confidently wrong. A two-stage gate plus model check —
+deferred; it roughly doubles per-question cost and latency, and should only be adopted if the
+evaluation set shows the deterministic gate failing.
+
+---
+
+## R17. Deployment posture
+
+**Decision**: Bind to loopback by default, with a startup guard that refuses to bind a non-local
+interface unless an explicit exposure setting is present. Application-layer security is built to
+public-exposure standard now — hashed credentials, expiring and invalidatable sessions, secrets never
+present in responses or logs, all limits enforced server-side. Deployment-layer protections are not
+built.
+
+**Rationale**: FR-078–FR-081 draw the line at cost. The application-layer measures are near-free when
+done first and expensive to retrofit — changing a credential storage scheme after data exists is a
+migration, not an edit. The deployment-layer measures (transport security, abuse protection,
+monitoring) carry real monetary and operational cost and can be added later without touching
+application code, which is exactly why deferring them is safe. FR-081 names them explicitly so their
+absence is a recorded decision rather than an oversight, and so nobody over-builds from FR-079.
+
+**Alternatives considered**: Full public-exposure readiness now — rejected, it front-loads cost for a
+deployment that does not exist. Local-only with no forward design — rejected, the shortcuts it
+permits (plain credentials, non-expiring sessions, client-enforced limits) are precisely the ones
+that become migrations later.
+
+---
+
+## R18. Intent-based alert matching
+
+**Decision**: Alert rules carry a matching mode — keyword, intent, or both. Intent rules store the
+researcher's plain-language description and a vector computed from it once, recomputed whenever the
+description changes. Evaluation compares the new material batch against stored rule vectors using the
+same pgvector index that serves Ask, gated by a configurable per-rule similarity threshold. Keyword
+matching remains fully functional and independent when the vector path is unavailable.
+
+**Rationale**: A keyword rule cannot catch the same intent expressed in different words, which is
+precisely the case that matters for finding leads — someone asking for a tool by describing their
+problem rather than naming the category. The embedding infrastructure already exists for retrieval
+(R2), so the marginal cost is one vector per rule and one similarity comparison per incoming post.
+
+Keeping the two modes independent is deliberate and load-bearing: it preserves US5 as a story that
+can ship without any AI work, which in turn preserves an AI-free path to a genuinely useful product
+(US1 → US2 → US5). Coupling them would have made lead-finding wait on the most expensive story in the
+project.
+
+**Degradation is a requirement, not a nicety** (FR-085). An alert that silently stops matching is
+worse than one that never existed, because the researcher assumes coverage they do not have. When the
+vector path is unavailable the keyword half continues and the rule reports itself partially active.
+
+**Alternatives considered**: Replacing keyword matching with intent matching entirely — rejected, it
+makes US5 depend on US4 and removes the exact-term precision that keyword rules give for brand and
+competitor monitoring. Asking a model per rule per post whether it matches — rejected as
+prohibitively expensive at ingestion volume, and non-deterministic where reproducibility matters.
+Expanding a rule into synonyms with a model at creation time — rejected as a strictly worse
+approximation of what an embedding already does.
+
+---
+
 ## Resolved Technical Context
 
 | Item | Resolution |
@@ -253,7 +390,13 @@ inverts Constitution IX's regression gate and means the first prompt change ship
 | Testing | pytest, pytest-asyncio, ruff; externals always mocked (Constitution IV) |
 | Target platform | Linux server, containerized |
 | Project type | Web application — backend plus frontend |
-| Auth | Single-user session sign-in (R11) |
-| Scale | One user; up to 50 communities per audience; 8 user stories; 68 functional requirements |
+| Auth | Single-user session sign-in (R11), built to public-exposure standard (R17) |
+| Deployment | Loopback-bound with a startup guard; exposure is configuration, not code (R17) |
+| Durability | Nightly dump outside the container, with periodic verified restore (R14) |
+| Deletion handling | Scheduled availability re-check; purge text and chunks, keep tombstone (R13) |
+| Analysis resilience | Chunked commits with a persisted cursor; resume, never restart (R15) |
+| Refusal | Deterministic gate: minimum passage count above a similarity floor (R16) |
+| Alert matching | Keyword and intent modes, independently operable; intent reuses pgvector (R18) |
+| Scale | One user; up to 50 communities per audience; 8 user stories; 83 functional requirements |
 
 No `NEEDS CLARIFICATION` items remain.

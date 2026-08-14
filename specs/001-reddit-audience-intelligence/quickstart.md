@@ -116,6 +116,15 @@ from general knowledge (FR-030, SC-007); (3) an answer consistent with the first
 instructions and…"). Ask a question that retrieves it. The answer must treat it as material to
 analyze, never as direction (FR-033, Constitution VIII).
 
+**Threshold check**: ask a question that retrieves exactly one strong match and nothing else. It must
+be refused, because one passage does not meet the minimum count (FR-076). Confirm the response
+reports `passages_above_floor` so the decision is auditable, and that
+`GET /ops/retrieval-settings` shows the values that produced it.
+
+**Failure check**: with the provider unreachable, ask a question mid-stream. The response must come
+back with `outcome: failed`, not `refused` — and no partial text may be shown or stored (FR-075).
+Confirm the failed turn does not appear in the SC-007 refusal statistics.
+
 ## Scenario 5 — Alerts (User Story 5, P5)
 
 1. Create a rule with two keywords scoped to an audience.
@@ -125,6 +134,14 @@ analyze, never as direction (FR-033, Constitution VIII).
 **Expect**: the match appears in-app within 15 minutes of collection (SC-014), naming the rule and the
 terms that fired; a non-matching post does not appear; editing and deleting the rule leaves recorded
 matches intact (FR-059).
+
+**Intent check**: create a rule describing an intent ("someone looking for a tool to monitor
+subreddits") using no keywords. Seed a post phrasing that need entirely differently. It must match,
+and the match must report `matched_mode: intent` with its `similarity` (FR-082, FR-083).
+
+**Degradation check**: disable the embedding capability and re-run evaluation. Keyword rules must
+keep matching, and intent rules must report `intent_matching_active: false` — never appear to be
+working while silently matching nothing (FR-085).
 
 **Also verify**: a deliberately broad rule reports `matching_broadly` and offers narrowing (FR-060).
 A rule whose audience contains an unavailable community keeps working and names the degraded one
@@ -161,15 +178,81 @@ clear message rather than continuing to spend (FR-046).
 **Published accuracy**: `/ops/evaluation` reports agreement against the labeled set alongside the
 non-LLM baseline (FR-047, SC-008, Constitution IX).
 
+## Scenario 9 — Deletion propagation (FR-067–FR-069)
+
+1. Collect a post, confirm it appears in the feed, in search, and as an Ask citation.
+2. Bookmark it.
+3. Delete it at the source (use a post you control), then run the availability re-check.
+
+**Expect**: the post disappears from feeds, search, and analysis material; its text is gone from
+storage; its non-content row survives so historical counts are unchanged; its embedding chunks are
+deleted so it can no longer be retrieved. Your bookmark still shows the captured text, marked as no
+longer available at the source (FR-069).
+
+**Retrieval check**: re-ask the question that previously cited it. The purged material must not be
+retrievable — verifying that chunks were deleted, not merely that text was blanked.
+
+**Citation check**: open the earlier answer that cited it. The citation must resolve to a tombstone
+explaining the material is gone, not break and not silently vanish from the record.
+
+**Bookmark deletion check**: delete the bookmark. The captured text must be destroyed — it was the
+last remaining copy.
+
+## Scenario 10 — Backup and restore (FR-070, FR-071, SC-018)
+
+1. Let the nightly backup run, then check `GET /ops/backups`.
+2. Restore the most recent dump into a scratch database.
+3. Compare row counts on community snapshots and bookmarks.
+
+**Expect**: a backup exists outside the application container, a rolling window is retained, and the
+restore reproduces the irreplaceable tables intact. `GET /ops/backups` reports when a restore was
+last actually verified — not merely when a dump was last written.
+
+> Run this before you have data worth losing, not after. The usual failure is not a missing backup
+> but an unrestorable one, and you only find out at the worst possible moment.
+
+## Scenario 11 — Analysis interruption and resume (FR-072–FR-074, SC-019)
+
+1. Start an analysis run over a few hundred posts.
+2. Make the provider fail partway (revoke the key or block the host).
+3. Note the audience state, then restore access and re-run.
+
+**Expect**: chunks completed before the failure are kept; the audience reports `analysis_state:
+partial` with `items_done` and `items_total`, and the interface renders it as visibly incomplete; the
+resumed run starts from the recorded cursor rather than the beginning.
+
+**Cost check**: compare `/ops/usage` before and after the resume. Material analysed before the
+interruption must incur no new spend (SC-019).
+
+## Scenario 12 — Deployment posture (FR-078–FR-081, SC-020)
+
+1. Start the application normally — confirm it binds to loopback only and is unreachable from another
+   machine.
+2. Attempt to start it bound to a non-local interface without the explicit exposure setting.
+3. Set the exposure flag and start again.
+
+**Expect**: (2) refuses to start and explains why, rather than silently becoming reachable; (3)
+succeeds with no code change — which is the whole of SC-020.
+
+**Hardening check**: confirm stored credentials are hashed, that a session expires and can be
+invalidated, and that no secret appears in any response, log line, or client-side bundle (FR-079).
+Confirm spend ceilings hold when the request is made directly, bypassing the interface (FR-080).
+
+**Scope check**: transport security, abuse protection, and external monitoring are deliberately
+absent (FR-081). Their absence is correct here and is not a finding.
+
 ---
 
 ## Definition of done for this feature
 
-- All eight scenarios pass, including every negative and guardrail check.
+- All twelve scenarios pass, including every negative, guardrail, and resilience check.
 - Test suite green; service-layer coverage at or above 80%; ruff clean.
 - `python evals/run_eval.py` reports theme and sentiment agreement at or above 75% against the
   labeled set, with the baseline comparison recorded.
 - No PRAW import outside `backend/app/reddit/`; no cross-module table access.
-- `README.md`'s API table matches `contracts/rest-api.md`.
-- The two Complexity Tracking items in `plan.md` — latency budget reconciliation and vocabulary
-  extension — are resolved via `/speckit-constitution` rather than left open.
+- `README.md` links to `contracts/rest-api.md` rather than restating the API surface, and no route or
+  payload detail has crept back into it (Constitution III).
+- A restore has actually been performed from a real backup, not just written (FR-071).
+- Purged material is unretrievable, not merely unreadable — verified by re-running a query that
+  previously retrieved it.
+- The application refuses to bind a non-local interface without the explicit exposure setting.

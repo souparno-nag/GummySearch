@@ -419,60 +419,18 @@ ask_service.py
 
 #### API Structure
 
-```markdown
-/auth
-  POST   /auth/register
-  POST   /auth/login
-  POST   /auth/refresh
+The HTTP surface is defined in
+[`specs/001-reddit-audience-intelligence/contracts/rest-api.md`](specs/001-reddit-audience-intelligence/contracts/rest-api.md),
+which is the single source of truth for routes, request and response shapes, the shared pagination
+and error envelopes, and which requirement each endpoint satisfies.
 
-/audiences
-  GET    /audiences                         # List user's audiences
-  POST   /audiences                         # Create audience
-  GET    /audiences/{id}                    # Audience detail
-  PATCH  /audiences/{id}                    # Rename / update
-  DELETE /audiences/{id}
-  POST   /audiences/{id}/subreddits         # Add subreddit
-  DELETE /audiences/{id}/subreddits/{name}  # Remove subreddit
-  GET    /audiences/curated                 # Browse curated audiences
+It is deliberately **not** restated here. Maintaining the same API surface in two documents
+guarantees they drift, and a drifted API document is worse than no API document — see Principle III
+of the constitution.
 
-/feed
-  GET    /feed/{audience_id}                # Paginated aggregated feed
-  WS     /feed/{audience_id}/live           # WebSocket live updates
-
-/search
-  POST   /search                            # Advanced search with filters
-
-/analysis
-  GET    /analysis/{audience_id}/topics
-  GET    /analysis/{audience_id}/themes
-  GET    /analysis/{audience_id}/themes/{theme_id}
-  POST   /analysis/{audience_id}/ask        # RAG "Ask" query (cited, streamed)
-
-/ops
-  GET    /ops/usage                         # AI cost, tokens, latency, cache hit rate
-  GET    /ops/usage/{audience_id}           # Same, scoped to one audience
-  GET    /ops/quota                         # Reddit API calls used vs. saved by cache
-
-/subreddits
-  GET    /subreddits/search                 # Subreddit discovery
-  GET    /subreddits/trending               # Trending with filters
-
-/alerts
-  GET    /alerts
-  POST   /alerts
-  PATCH  /alerts/{id}
-  DELETE /alerts/{id}
-
-/users
-  GET    /users/me
-  PATCH  /users/me
-  POST   /users/bookmarks
-  GET    /users/bookmarks
-
-  # Future scope — not in the current build:
-  # GET  /users/workspace                   # Team workspaces
-  # POST /users/reports/{audience_id}       # Shareable report generation
-```
+Broadly, the surface covers: `/audiences` and `/audiences/starter`, `/audiences/{id}/feed`,
+`/search`, `/audiences/{id}/analysis/*` and `/ask`, `/alerts/rules` and `/alerts/matches`,
+`/communities/*`, `/bookmarks`, and `/ops/*` for cost, quota, and evaluation transparency.
 
 #### Infrastructure at a Glance
 
