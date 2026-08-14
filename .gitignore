@@ -209,3 +209,6 @@ __marimo__/
 
 # VSCode
 .vscode
+
+# Claude
+CLAUDE.md

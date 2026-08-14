@@ -1,7 +1,7 @@
 import praw
 import os
 from dotenv import load_dotenv
-from praw.reddit import Reddit
+from praw.reddit import Reddit, Subreddit
 
 # Setting up environment variables
 load_dotenv() # Load all environment variables
@@ -17,3 +17,9 @@ def setup_reddit_client() -> Reddit:
         user_agent=REDDIT_USER_AGENT
     )
     return reddit
+
+# Obtain a subreddit
+def obtain_subreddit(subreddit_name: str) -> Subreddit:
+    reddit = setup_reddit_client()
+    subreddit = reddit.subreddit(subreddit_name)
+    return subreddit
