@@ -210,5 +210,7 @@ __marimo__/
 # VSCode
 .vscode
 
-# Claude
+# Claude and specify
 CLAUDE.md
+.claude
+.specify
