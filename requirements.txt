@@ -21,3 +21,7 @@ sentence-transformers
 python-dotenv
 # Lint and format
 ruff
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
