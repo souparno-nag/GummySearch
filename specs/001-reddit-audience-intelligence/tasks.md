@@ -44,7 +44,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 - [X] T006 Initialize Alembic in backend/alembic/ with an async migration environment
 - [X] T007 [P] Create backend/app/config.py reading all settings from .env — the only module permitted to read secrets
 - [X] T008 [P] Create .env.example documenting Reddit credentials, provider credentials, the pinned model identifier, and the exposure flag
-- [ ] T009 Initialize the SvelteKit application (adapter-static, SSR off — R10) in frontend/
+- [X] T009 Initialize the SvelteKit application (adapter-static, SSR off — R10) in frontend/
 - [ ] T010 [P] Create the evals/ tree with datasets/, results/, and a run_eval.py entry point
 
 ---
