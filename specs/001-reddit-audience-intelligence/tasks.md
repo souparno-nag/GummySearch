@@ -40,7 +40,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 - [X] T002 Add FastAPI, PRAW, Celery, SQLAlchemy, Alembic, Pydantic, pgvector, and the LLM provider SDK to requirements.txt
 - [X] T003 [P] Configure ruff lint and format rules in backend/pyproject.toml
 - [X] T004 [P] Configure pytest, pytest-asyncio, and a hard-failing 80% service-layer coverage gate in backend/pyproject.toml so every run enforces Constitution IV rather than deferring it
-- [ ] T005 [P] Create docker-compose.yml at repo root with PostgreSQL plus the pgvector extension and Redis
+- [X] T005 [P] Create docker-compose.yml at repo root with PostgreSQL plus the pgvector extension and Redis
 - [ ] T006 Initialize Alembic in backend/alembic/ with an async migration environment
 - [ ] T007 [P] Create backend/app/config.py reading all settings from .env — the only module permitted to read secrets
 - [ ] T008 [P] Create .env.example documenting Reddit credentials, provider credentials, the pinned model identifier, and the exposure flag
