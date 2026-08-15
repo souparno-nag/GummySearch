@@ -29,3 +29,6 @@ ruff
 pytest
 pytest-asyncio
 pytest-cov
+# Required by fastapi.testclient, which drives the ASGI app in-process for the
+# error-envelope and contract tests
+httpx
