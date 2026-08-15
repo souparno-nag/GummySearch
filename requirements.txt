@@ -5,6 +5,9 @@ fastapi
 uvicorn[standard]
 # Background jobs
 celery[redis]
+# Cache client — imported directly by app/common/redis.py, so it is a declared
+# dependency rather than relying on celery[redis] to pull it in transitively
+redis
 # Database
 sqlalchemy
 alembic
