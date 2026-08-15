@@ -24,6 +24,7 @@ boundary; everything below returns project-owned Pydantic types.
 | `fetch_top_level_comments(post, limit) -> list[CommentData]` | Threshold-gated comment collection | workers |
 | `search_reddit(query, filters) -> LiveSearchResult` | The widened `all_reddit` scope (R9) | `feed` |
 | `snapshot_community_stats(name) -> SnapshotData` | Daily statistics capture | workers |
+| `check_availability(source_ids) -> list[AvailabilityResult]` | Detect deletions and removals (FR-067) | workers |
 | `quota_status() -> QuotaStatus` | Remaining budget and calls avoided by cache | `ops` |
 
 **Forbidden**: any other module importing `praw`, constructing a Reddit client, or reading
@@ -72,6 +73,9 @@ only; a second dedup path would produce inconsistent counts and break trend deno
 | `ask(audience_id, question) -> AsyncIterator[AskChunk]` | Streamed, cited answer | `ai` router |
 | `analyze_batch(post_ids)` | Called by workers after ingestion | workers |
 | `embed_batch(post_ids)` | Chunk and embed into pgvector | workers |
+| `resume_run(run_id)` | Continue an interrupted analysis from its cursor (FR-073) | workers |
+| `analysis_state(audience_id)` | Completion proportion for partial display (FR-074) | `ai` router |
+| `purge_chunks(post_ids)` | Delete embeddings for purged material (FR-068) | workers |
 
 **Internal, never exposed**: `adapter.py` is the single point of model access. No other module — and
 no other file within `app/ai/` outside the adapter — may call the provider SDK directly, because the
@@ -89,6 +93,8 @@ Untrusted content is delimited and labeled by the adapter (Constitution VIII, FR
 |---|---|---|
 | `list_rules(user_id)` / `create_rule` / `update_rule` / `delete_rule` | Rule lifecycle (FR-056) | `alerts` router |
 | `evaluate_new_material(post_ids) -> list[AlertMatch]` | Called by the ingestion chain (R8) | workers |
+| `embed_rule_intent(rule_id)` | Compute a rule's intent vector on create or edit (FR-082) | `alerts` service |
+| `intent_matching_available() -> bool` | Whether intent matching can run right now (FR-085) | `alerts` router |
 | `list_matches(user_id, filters) -> Page[GroupedMatch]` | Grouped so one post appears once | `alerts` router |
 
 **Forbidden**: evaluating rules by re-scanning history. Evaluation is against the newly persisted
@@ -118,6 +124,8 @@ survives deletion at the source.
 | `check_spend_allowed(feature, estimated_cost)` | Called **before** spending (FR-046) | `ai` |
 | `usage_summary(audience_id=None)` | Aggregates for the `/ops` surfaces | `ops` router |
 | `evaluation_results()` | Published accuracy figures (FR-047) | `ops` router |
+| `retrieval_settings()` | Current refusal threshold values (FR-076) | `ops` router, `ai` |
+| `record_backup(result)` / `backup_status()` | Backup and verified-restore history (FR-070, FR-071) | workers, `ops` router |
 
 **Forbidden**: any external call path skipping `record_usage`, and any spending path skipping
 `check_spend_allowed`. Constitution VI and IX both depend on these being unconditional.

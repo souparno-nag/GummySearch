@@ -211,6 +211,13 @@ __marimo__/
 .vscode
 
 # Claude and specify
-CLAUDE.md
 .claude
-.specify
+
+# Spec Kit tooling stays local, but the constitution governs this project and is
+# referenced by name from README.md, spec.md, plan.md and the contracts — so it is
+# tracked. Git cannot re-include a file inside an excluded directory, hence the
+# path-by-path pattern below rather than a single negation.
+.specify/*
+!.specify/memory/
+.specify/memory/*
+!.specify/memory/constitution.md

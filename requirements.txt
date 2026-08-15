@@ -1,4 +1,34 @@
 # Reddit
 praw
+# Web framework
+fastapi
+uvicorn[standard]
+# Background jobs
+celery[redis]
+# Cache client — imported directly by app/common/redis.py, so it is a declared
+# dependency rather than relying on celery[redis] to pull it in transitively
+redis
+# Database
+sqlalchemy
+alembic
+asyncpg
+pgvector
+# Validation
+pydantic
+pydantic-settings
+# AI / LLM orchestration — Groq for completions, local sentence-transformers for embeddings (R1)
+langchain
+langchain-groq
+langchain-huggingface
+sentence-transformers
 # Python environment
 python-dotenv
+# Lint and format
+ruff
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
+# Required by fastapi.testclient, which drives the ASGI app in-process for the
+# error-envelope and contract tests
+httpx

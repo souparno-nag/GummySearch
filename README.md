@@ -195,7 +195,7 @@ Audiences are lists of subreddits grouped together based on different criterion.
 3. **Feed & Search Engine**
 Consumes data from the Reddit Data Layer and serves it to the frontend in a unified, filterable format. Handles aggregated feed construction across multiple subreddits, advanced keyword search with Boolean support, filtering by timeline, post type, subreddit inclusion/exclusion, and user inclusion/exclusion. Also responsible for deduplication and cross-post detection.
 4. **AI & Analysis Engine**
-The intelligence layer. Responsible for theme tagging, topic extraction, sentiment analysis, pattern detection, comment-level analysis, and the "Ask" feature (RAG-based Q&A over audience posts). Calls out to an LLM (OpenAI / Anthropic) and manages prompt construction, response parsing, and result caching to avoid redundant inference costs.
+The intelligence layer. Responsible for theme tagging, topic extraction, sentiment analysis, pattern detection, comment-level analysis, and the "Ask" feature (RAG-based Q&A over audience posts). Calls out to Groq for chat completions (open-weight models, via LangChain) and embeds locally with a HuggingFace sentence-transformers model, and manages prompt construction, response parsing, and result caching to avoid redundant inference costs.
 5. **Alerts, Notifications & Integrations** *(mostly deferred)*
 Manages keyword alert rules, brand mention tracking, and scheduling logic. In-app alerts are in
 scope; outbound channels — email digests, Slack and Discord webhooks — are deferred.
@@ -208,7 +208,7 @@ team workspaces, and shareable report generation are deferred; JammySearch is si
 ```mermaid
 graph TD
     subgraph Clients ["Clients"]
-        WebApp["Web App (Next.js) / Future Mobile"]
+        WebApp["Web App (SvelteKit, static SPA) / Future Mobile"]
     end
 
     WebApp -- "HTTPS / REST + WebSocket" --> APIGateway
@@ -257,8 +257,11 @@ graph TD
 - SQLAlchemy + Alembic for ORM and migrations
 - PostgreSQL with the `pgvector` extension as the vector store — no separate vector database, one
   fewer service to run and one fewer index to keep in sync with the source of record
-- LangChain or LlamaIndex for the RAG/Ask pipeline
-- OpenAI SDK for embeddings and completions
+- LangChain for the RAG/Ask pipeline and as the single orchestration layer over model calls
+- Groq (`langchain-groq`) for chat completions against open-weight models — no per-token cost at this
+  scale
+- Local HuggingFace `sentence-transformers` embeddings (`langchain-huggingface`) — runs in-process, no
+  API key, no network call, no cost
 - Pydantic for data validation (already built into FastAPI)
 - pytest + pytest-asyncio for tests, ruff for lint and formatting
 
@@ -419,60 +422,18 @@ ask_service.py
 
 #### API Structure
 
-```markdown
-/auth
-  POST   /auth/register
-  POST   /auth/login
-  POST   /auth/refresh
+The HTTP surface is defined in
+[`specs/001-reddit-audience-intelligence/contracts/rest-api.md`](specs/001-reddit-audience-intelligence/contracts/rest-api.md),
+which is the single source of truth for routes, request and response shapes, the shared pagination
+and error envelopes, and which requirement each endpoint satisfies.
 
-/audiences
-  GET    /audiences                         # List user's audiences
-  POST   /audiences                         # Create audience
-  GET    /audiences/{id}                    # Audience detail
-  PATCH  /audiences/{id}                    # Rename / update
-  DELETE /audiences/{id}
-  POST   /audiences/{id}/subreddits         # Add subreddit
-  DELETE /audiences/{id}/subreddits/{name}  # Remove subreddit
-  GET    /audiences/curated                 # Browse curated audiences
+It is deliberately **not** restated here. Maintaining the same API surface in two documents
+guarantees they drift, and a drifted API document is worse than no API document — see Principle III
+of the constitution.
 
-/feed
-  GET    /feed/{audience_id}                # Paginated aggregated feed
-  WS     /feed/{audience_id}/live           # WebSocket live updates
-
-/search
-  POST   /search                            # Advanced search with filters
-
-/analysis
-  GET    /analysis/{audience_id}/topics
-  GET    /analysis/{audience_id}/themes
-  GET    /analysis/{audience_id}/themes/{theme_id}
-  POST   /analysis/{audience_id}/ask        # RAG "Ask" query (cited, streamed)
-
-/ops
-  GET    /ops/usage                         # AI cost, tokens, latency, cache hit rate
-  GET    /ops/usage/{audience_id}           # Same, scoped to one audience
-  GET    /ops/quota                         # Reddit API calls used vs. saved by cache
-
-/subreddits
-  GET    /subreddits/search                 # Subreddit discovery
-  GET    /subreddits/trending               # Trending with filters
-
-/alerts
-  GET    /alerts
-  POST   /alerts
-  PATCH  /alerts/{id}
-  DELETE /alerts/{id}
-
-/users
-  GET    /users/me
-  PATCH  /users/me
-  POST   /users/bookmarks
-  GET    /users/bookmarks
-
-  # Future scope — not in the current build:
-  # GET  /users/workspace                   # Team workspaces
-  # POST /users/reports/{audience_id}       # Shareable report generation
-```
+Broadly, the surface covers: `/audiences` and `/audiences/starter`, `/audiences/{id}/feed`,
+`/search`, `/audiences/{id}/analysis/*` and `/ask`, `/alerts/rules` and `/alerts/matches`,
+`/communities/*`, `/bookmarks`, and `/ops/*` for cost, quota, and evaluation transparency.
 
 #### Infrastructure at a Glance
 
