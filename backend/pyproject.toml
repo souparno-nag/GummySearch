@@ -37,6 +37,9 @@ line-ending = "lf"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Make `app` and `workers` importable from tests without an installed package or a
+# sys.path-editing conftest. Paths are relative to this file's directory.
+pythonpath = ["."]
 asyncio_mode = "auto"
 addopts = "--cov=app --cov-report=term-missing --cov-fail-under=80 --strict-markers"
 

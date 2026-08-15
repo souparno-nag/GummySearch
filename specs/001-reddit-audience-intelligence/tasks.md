@@ -57,7 +57,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 
 ### Common infrastructure
 
-- [ ] T011 Implement the async engine and session factory in backend/app/common/database.py
+- [X] T011 Implement the async engine and session factory in backend/app/common/database.py
 - [ ] T012 [P] Implement the Redis connection pool in backend/app/common/redis.py
 - [ ] T013 [P] Define typed exception classes in backend/app/common/exceptions.py
 - [ ] T014 Implement error-envelope middleware translating typed exceptions to the shared error shape in backend/app/common/middleware.py
