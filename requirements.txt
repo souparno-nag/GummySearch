@@ -19,3 +19,5 @@ langchain-huggingface
 sentence-transformers
 # Python environment
 python-dotenv
+# Lint and format
+ruff
