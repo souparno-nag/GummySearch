@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     groq_model: str = Field(alias="GROQ_MODEL")
     embedding_model_name: str = Field(alias="EMBEDDING_MODEL_NAME")
 
+    # Deployment exposure (FR-078). Binding beyond loopback requires this explicit opt-in;
+    # the startup bind guard built in T017-T018 reads this flag rather than the raw env var.
+    allow_remote_exposure: bool = Field(default=False, alias="ALLOW_REMOTE_EXPOSURE")
+
 
 @lru_cache
 def get_settings() -> Settings:

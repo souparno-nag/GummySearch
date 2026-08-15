@@ -43,7 +43,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 - [X] T005 [P] Create docker-compose.yml at repo root with PostgreSQL plus the pgvector extension and Redis
 - [X] T006 Initialize Alembic in backend/alembic/ with an async migration environment
 - [X] T007 [P] Create backend/app/config.py reading all settings from .env — the only module permitted to read secrets
-- [ ] T008 [P] Create .env.example documenting Reddit credentials, provider credentials, the pinned model identifier, and the exposure flag
+- [X] T008 [P] Create .env.example documenting Reddit credentials, provider credentials, the pinned model identifier, and the exposure flag
 - [ ] T009 Initialize the Next.js application in frontend/
 - [ ] T010 [P] Create the evals/ tree with datasets/, results/, and a run_eval.py entry point
 
