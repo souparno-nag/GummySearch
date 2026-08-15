@@ -205,19 +205,37 @@ service handling both — rejected, the two have different latency, cost, and co
 
 ## R10. Frontend
 
-**Decision**: Next.js, as named in `README.md`, consuming the REST contract in `contracts/`. Design
-tokens and a shared component library established before feature screens, so Constitution V's
-prohibition on one-off colors and spacing is enforceable from the first screen rather than
-retrofitted.
+**Decision**: SvelteKit, configured with `adapter-static` so it ships as a pure client-side SPA with
+server-side rendering explicitly turned off, consuming the REST contract in `contracts/`. File-based
+routing under `frontend/src/routes/` replaces the `pages/` tree this document originally named under
+Next.js — the routing convention is equivalent (`routes/audiences/[id]/feed/+page.svelte` mirrors
+`pages/audiences/[id]/feed.tsx`), only the file extension and directory name change, from `.tsx` under
+`pages/` to `.svelte` under `routes/`. Design tokens and a shared component library established before
+feature screens, so Constitution V's prohibition on one-off colors and spacing is enforceable from the
+first screen rather than retrofitted.
 
 **Rationale**: Constitution V requires all four view states (loading, empty, error, populated) on
 every data-loading view and requires shared components. Both are dramatically cheaper to establish
 first than to retrofit. The four-state requirement in particular is best expressed as a single shared
-wrapper component that every data view uses.
+wrapper component that every data view uses. SvelteKit was chosen over Next.js because this feature's
+frontend is a pure client of the FastAPI REST API — none of Next's SSR, ISR, or edge-middleware
+capabilities are used, since all business logic lives in the backend per Constitution II. Svelte
+compiles components to plain JS with no virtual-DOM runtime shipped to the browser, and its built-in
+reactivity (`$state`, stores) covers the shared UI state this project needs (current audience, active
+filters) without an added state-management dependency the way a bare React SPA would need one.
+`adapter-static` keeps the SSR machinery off entirely rather than paying for a capability this
+single-user, locally-deployed tool does not use.
 
-**Alternatives considered**: Server-rendered templates from FastAPI — rejected, it contradicts the
-README and makes the four-state UX requirement awkward. Deferring the design system until several
-screens exist — rejected, that is precisely how one-off styling accumulates.
+**Alternatives considered**: Next.js, the original choice — superseded once the SSR/ISR/edge features
+it offers turned out to have no consumer in this design; kept only the parts (file-based routing,
+TypeScript, a build tool) that a lighter stack provides too. Vite + bare React — rejected in favor of
+Svelte for the same "lightest stack that still does the job" reasoning: no virtual-DOM runtime, and no
+added state-management library needed. Plain Vite + Svelte without SvelteKit — rejected only for
+convenience; it is marginally lighter still, but SvelteKit's file-based router is a closer match to
+this project's existing planned route tree and avoids hand-wiring a router library for the same
+practical effect. Server-rendered templates from FastAPI — rejected, it contradicts the README and
+makes the four-state UX requirement awkward. Deferring the design system until several screens exist —
+rejected, that is precisely how one-off styling accumulates.
 
 ---
 
@@ -403,7 +421,7 @@ approximation of what an embedding already does.
 | Storage | PostgreSQL as system of record; `pgvector` for embeddings; Redis as cache and broker |
 | Background work | Celery with Celery Beat |
 | LLM access | Single internal adapter over LangChain; Groq for completions, local `sentence-transformers` for embeddings; explicitly pinned model identifiers (R1) |
-| Frontend | Next.js with a design-token system established first (R10) |
+| Frontend | SvelteKit (adapter-static, SSR off) with a design-token system established first (R10) |
 | Testing | pytest, pytest-asyncio, ruff; externals always mocked (Constitution IV) |
 | Target platform | Linux server, containerized |
 | Project type | Web application — backend plus frontend |

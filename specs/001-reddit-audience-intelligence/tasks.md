@@ -44,7 +44,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 - [X] T006 Initialize Alembic in backend/alembic/ with an async migration environment
 - [X] T007 [P] Create backend/app/config.py reading all settings from .env — the only module permitted to read secrets
 - [X] T008 [P] Create .env.example documenting Reddit credentials, provider credentials, the pinned model identifier, and the exposure flag
-- [ ] T009 Initialize the Next.js application in frontend/
+- [ ] T009 Initialize the SvelteKit application (adapter-static, SSR off — R10) in frontend/
 - [ ] T010 [P] Create the evals/ tree with datasets/, results/, and a run_eval.py entry point
 
 ---
@@ -124,7 +124,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 ### Frontend foundation (R10, Constitution V)
 
 - [ ] T045 [P] Define design tokens with light and dark palettes in frontend/src/design/tokens.ts
-- [ ] T046 [P] Implement the shared four-state data wrapper (loading, empty, error, populated) in frontend/src/components/DataView.tsx
+- [ ] T046 [P] Implement the shared four-state data wrapper (loading, empty, error, populated) in frontend/src/components/DataView.svelte
 - [ ] T047 Implement the typed API client with shared pagination and error handling in frontend/src/services/client.ts
 
 **Checkpoint**: Foundation ready — user story work can begin.
@@ -161,9 +161,9 @@ read a post in full, and confirm cross-posted content appears once — without v
 - [ ] T062 [US1] Implement post ingestion with dedup and persistence in backend/workers/tasks/ingest.py
 - [ ] T063 [US1] Register per-audience ingestion on the Beat schedule with rate-derived cadence in backend/workers/schedules.py
 - [ ] T064 [P] [US1] Author the shipped starter audiences seed data in backend/scripts/seed_starter_audiences.py
-- [ ] T065 [P] [US1] Build the audience list and creation screens in frontend/src/pages/audiences/
-- [ ] T066 [US1] Build the feed view using the four-state wrapper in frontend/src/pages/audiences/[id]/feed.tsx
-- [ ] T067 [US1] Build the in-app post preview in frontend/src/components/PostPreview.tsx
+- [ ] T065 [P] [US1] Build the audience list and creation screens in frontend/src/routes/audiences/
+- [ ] T066 [US1] Build the feed view using the four-state wrapper in frontend/src/routes/audiences/[id]/feed/+page.svelte
+- [ ] T067 [US1] Build the in-app post preview in frontend/src/components/PostPreview.svelte
 
 ### Deletion obligations — created by this story (FR-067–FR-069)
 
@@ -178,7 +178,7 @@ read a post in full, and confirm cross-posted content appears once — without v
 
 - [ ] T172 [P] [US1] Write failing integration tests for browsing and searching with the source unavailable in backend/tests/integration/test_degraded_mode.py
 - [ ] T173 [US1] Implement degraded-mode serving from collected material with an explicit staleness notice in backend/app/feed/feed_service.py
-- [ ] T174 [US1] Capture the adult-content flag on ingestion and surface it before a post is opened in backend/app/feed/models.py and frontend/src/components/PostPreview.tsx
+- [ ] T174 [US1] Capture the adult-content flag on ingestion and surface it before a post is opened in backend/app/feed/models.py and frontend/src/components/PostPreview.svelte
 
 **Checkpoint**: US1 is independently shippable and is the MVP.
 
@@ -202,7 +202,7 @@ author, and confirm the result set changes accordingly.
 - [ ] T075 [US2] Implement saved-material search with keyword, time, author, and community filters in backend/app/feed/search_service.py
 - [ ] T076 [P] [US2] Implement the widened all-of-Reddit search path in backend/app/reddit/search.py
 - [ ] T077 [US2] Implement search routes defaulting to saved-material scope in backend/app/feed/router.py
-- [ ] T078 [US2] Build the search screen using the four-state wrapper, with scope selector and live-results warning, in frontend/src/pages/search.tsx
+- [ ] T078 [US2] Build the search screen using the four-state wrapper, with scope selector and live-results warning, in frontend/src/routes/search/+page.svelte
 
 ---
 
@@ -256,8 +256,8 @@ inventing results.
 - [ ] T095 [US3] Implement the chunked, cursor-resumable analysis runner in backend/app/ai/runner.py
 - [ ] T096 [US3] Implement analysis routes exposing analysis_state and sufficiency in backend/app/ai/router.py
 - [ ] T097 [US3] Implement the analysis worker task chaining from ingestion in backend/workers/tasks/analyze.py
-- [ ] T098 [US3] Build the analysis and theme-detail screens using the four-state wrapper, with partial-state rendering, in frontend/src/pages/audiences/[id]/analysis.tsx
-- [ ] T099 [US3] Build the trend chart showing coverage gaps rather than smoothing them in frontend/src/components/TrendChart.tsx
+- [ ] T098 [US3] Build the analysis and theme-detail screens using the four-state wrapper, with partial-state rendering, in frontend/src/routes/audiences/[id]/analysis/+page.svelte
+- [ ] T099 [US3] Build the trend chart showing coverage gaps rather than smoothing them in frontend/src/components/TrendChart.svelte
 - [ ] T170 [US3] Populate and expose derived_from_comments on topics and themes in backend/app/ai/theme_service.py and backend/app/ai/router.py
 - [ ] T171 [US3] Wire pattern and sentiment into saved-material search responses, signalling availability per FR-020, in backend/app/feed/search_service.py
 
@@ -290,7 +290,7 @@ verify refusal rather than a general-knowledge answer.
 - [ ] T111 [P] [US4] Define AskSession, AskTurn with three-valued outcome, and AskCitation in backend/app/ai/ask_models.py
 - [ ] T112 [US4] Implement the streamed, cited Ask pipeline in backend/app/ai/ask_service.py
 - [ ] T113 [US4] Implement ask routes with streaming and outcome reporting in backend/app/ai/router.py
-- [ ] T114 [US4] Build the Ask screen using the four-state wrapper, rendering citations, refusals, and failures distinctly, in frontend/src/pages/audiences/[id]/ask.tsx
+- [ ] T114 [US4] Build the Ask screen using the four-state wrapper, rendering citations, refusals, and failures distinctly, in frontend/src/routes/audiences/[id]/ask/+page.svelte
 
 ---
 
@@ -317,7 +317,7 @@ with the rule and matched terms named — and that editing the rule leaves the m
 - [ ] T122 [US5] Implement match listing grouped so one post appears once in backend/app/alerts/match_service.py
 - [ ] T123 [US5] Implement alert routes in backend/app/alerts/router.py
 - [ ] T124 [US5] Insert alert evaluation into the ingestion chain in backend/workers/tasks/alerts.py
-- [ ] T125 [US5] Build the rules and matches screens using the four-state wrapper, with act-in-place controls, in frontend/src/pages/alerts/
+- [ ] T125 [US5] Build the rules and matches screens using the four-state wrapper, with act-in-place controls, in frontend/src/routes/alerts/
 
 ### Intent matching for User Story 5 (FR-082–FR-085)
 
@@ -331,7 +331,7 @@ with the rule and matched terms named — and that editing the rule leaves the m
 - [ ] T161 [US5] Create the Alembic migration for intent fields and the rule vector index in backend/alembic/versions/
 - [ ] T162 [US5] Implement intent embedding on rule create and edit, with recomputation when intent_text changes, in backend/app/alerts/intent_service.py
 - [ ] T163 [US5] Implement intent matching against new material with keyword-only fallback in backend/app/alerts/evaluation_service.py
-- [ ] T164 [US5] Surface match_mode, similarity, and intent_matching_active in routes and the alerts screens in backend/app/alerts/router.py and frontend/src/pages/alerts/
+- [ ] T164 [US5] Surface match_mode, similarity, and intent_matching_active in routes and the alerts screens in backend/app/alerts/router.py and frontend/src/routes/alerts/
 
 ---
 
@@ -355,7 +355,7 @@ history, and add a result to an audience.
 - [ ] T131 [P] [US6] Implement tag derivation in backend/app/reddit/tags.py
 - [ ] T132 [US6] Implement history series assembly from snapshots in backend/app/reddit/history_service.py
 - [ ] T133 [US6] Implement discovery routes in backend/app/reddit/router.py
-- [ ] T134 [US6] Build the discovery screen using the four-state wrapper, with tags, filters, and add-to-audience, in frontend/src/pages/communities/
+- [ ] T134 [US6] Build the discovery screen using the four-state wrapper, with tags, filters, and add-to-audience, in frontend/src/routes/communities/
 
 ---
 
@@ -377,7 +377,7 @@ confirm a bookmark of deleted material still shows captured text.
 - [ ] T138 [US7] Create the Alembic migration for bookmarks in backend/alembic/versions/
 - [ ] T139 [US7] Implement bookmark capture, notes, and status transitions in backend/app/users/bookmark_service.py
 - [ ] T140 [US7] Implement bookmark routes with status filtering in backend/app/users/router.py
-- [ ] T141 [US7] Build the saved-posts screen using the four-state wrapper, with status controls and a destructive-delete warning, in frontend/src/pages/bookmarks/
+- [ ] T141 [US7] Build the saved-posts screen using the four-state wrapper, with status controls and a destructive-delete warning, in frontend/src/routes/bookmarks/
 
 ---
 
@@ -399,7 +399,7 @@ and last-refreshed time — and that exhausting a ceiling fails clearly.
 - [ ] T145 [P] [US8] Implement surfaces for the retrieval refusal threshold, the comment engagement threshold, and backup status in backend/app/ops/status_service.py
 - [ ] T146 [P] [US8] Implement published evaluation results reporting in backend/app/ops/evaluation_service.py
 - [ ] T147 [US8] Implement ops routes in backend/app/ops/router.py
-- [ ] T148 [US8] Build the transparency dashboard using the four-state wrapper in frontend/src/pages/ops/
+- [ ] T148 [US8] Build the transparency dashboard using the four-state wrapper in frontend/src/routes/ops/
 
 ---
 

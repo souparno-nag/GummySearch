@@ -18,7 +18,7 @@ rule.
 
 The technical approach is a **modular monolith** in Python — FastAPI for the API surface, PRAW behind
 a single isolating data layer, Celery for all collection and analysis, PostgreSQL as system of record
-with `pgvector` for retrieval, and a Next.js frontend. All model access goes through one internal
+with `pgvector` for retrieval, and a SvelteKit frontend (static SPA, SSR off — see R10). All model access goes through one internal
 adapter with a pinned model identifier, versioned prompt files, and schema-validated output, and
 every model call and Reddit call emits a cost and latency record.
 
@@ -40,7 +40,7 @@ is independently shippable and is the foundation everything else consumes.
 **Language/Version**: Python 3.11 (backend), TypeScript (frontend)
 
 **Primary Dependencies**: FastAPI, PRAW, Celery, SQLAlchemy, Alembic, Pydantic, pgvector, an LLM
-provider SDK behind an internal adapter, Next.js
+provider SDK behind an internal adapter, SvelteKit (adapter-static)
 
 **Storage**: PostgreSQL as system of record, including embeddings via the `pgvector` extension. Redis
 as cache and Celery broker, treated as fully reconstructible from PostgreSQL.
@@ -169,11 +169,11 @@ evals/                              # Constitution IX
 ├── run_eval.py                     # Also tunes the refusal threshold (R16)
 └── results/
 
-frontend/
+frontend/                             # SvelteKit, adapter-static — SSR off (R10)
 ├── src/
 │   ├── design/                     # Tokens + primitives, established before screens (R10)
-│   ├── components/                 # Shared components incl. the four-state data wrapper
-│   ├── pages/
+│   ├── components/                 # Shared components incl. the four-state data wrapper (*.svelte)
+│   ├── routes/                     # File-based routing, e.g. routes/audiences/[id]/feed/+page.svelte
 │   └── services/                   # Generated/typed API client
 └── tests/
 ```

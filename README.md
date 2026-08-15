@@ -208,7 +208,7 @@ team workspaces, and shareable report generation are deferred; JammySearch is si
 ```mermaid
 graph TD
     subgraph Clients ["Clients"]
-        WebApp["Web App (Next.js) / Future Mobile"]
+        WebApp["Web App (SvelteKit, static SPA) / Future Mobile"]
     end
 
     WebApp -- "HTTPS / REST + WebSocket" --> APIGateway
