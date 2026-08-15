@@ -420,7 +420,7 @@ and last-refreshed time — and that exhausting a ceiling fails clearly.
 
 ## Dependencies
 
-**Story completion order**
+### Story completion order
 
 ```text
 Setup (T001–T010)
@@ -434,7 +434,7 @@ Setup (T001–T010)
           └─> US8 (P8)                              # transparency needs telemetry only
 ```
 
-**Hard dependencies**
+### Hard dependencies
 
 - US2, US3, US5, US6, US7 all require US1's ingestion to have collected material.
 - US5's **keyword** matching has no AI dependency and can ship immediately after US1. Its **intent**
