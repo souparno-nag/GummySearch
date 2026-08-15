@@ -34,3 +34,24 @@ known-first-party = ["app", "workers"]
 quote-style = "double"
 indent-style = "space"
 line-ending = "lf"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "--cov=app --cov-report=term-missing --cov-fail-under=80 --strict-markers"
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = [
+    "app/ai/prompts/*",  # versioned prompt text, not executable logic
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
