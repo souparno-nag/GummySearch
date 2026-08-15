@@ -8,16 +8,30 @@ JammySearch (formerly named "GummySearch", after the commercial product of that 
 operating on 2025-11-30; this project is an independent implementation and not affiliated with it) is
 a Reddit intelligence / social-listening tool, currently in early scaffolding. Most of the architecture
 described below (and in `README.md`) is the **planned** design, not yet implemented as application
-logic. What *is* real: Phase 1 (Setup, tasks T001–T010 of
-`specs/001-reddit-audience-intelligence/tasks.md`) is complete — the full directory tree, `ruff` and
-`pytest` configured and enforcing an 80% service-layer coverage gate, `docker-compose.yml` (Postgres
-with `pgvector`, Redis), an async Alembic environment, `backend/app/config.py` as the sole reader of
-`.env` secrets, `.env.example`, a scaffolded SvelteKit frontend, and the `evals/` entry point stub.
-Phase 2 (Foundational, T011–T047) — the database session, Redis connection, the FastAPI app itself,
-auth, the rest of the Reddit data layer, telemetry, and the base ORM models — has not started yet.
-Check what actually exists under `backend/app/` before assuming a module is present; `backend/app/main.py`
-is still empty and `backend/app/reddit/` only has `client.py`. Each implemented task has a
-beginner-oriented writeup in `docs/tasks/T<id>.md` explaining what it added and why.
+logic.
+
+What *is* real:
+
+- **Phase 1 (Setup, T001–T010 of `specs/001-reddit-audience-intelligence/tasks.md`) is complete** — the
+  full directory tree, `ruff` and `pytest` configured and enforcing an 80% service-layer coverage gate,
+  `docker-compose.yml` (Postgres with `pgvector`, Redis), an async Alembic environment,
+  `backend/app/config.py` as the sole reader of `.env` secrets, `.env.example`, a scaffolded SvelteKit
+  frontend, and the `evals/` entry point stub.
+- **Phase 2's common-infrastructure block (T011–T016) is complete** — `backend/app/common/` now holds
+  `database.py` (async engine, session factory, shared `Base` and constraint naming convention),
+  `redis.py` (shared connection pool), `exceptions.py` (the typed `AppError` hierarchy), `middleware.py`
+  (the handlers rendering every error as the contract's envelope), and `pagination.py` (the `Page`
+  envelope and the enforced 100-row ceiling). `backend/app/main.py` is a real FastAPI app that boots
+  under `uvicorn app.main:app`, with a lifespan that closes both pools on shutdown.
+
+The rest of Phase 2 (T017–T047) has not started: no bind guard, no auth, no rate limiting, no ORM
+models or migrations, no Celery, no telemetry, and the Reddit data layer still only has `client.py`.
+**No HTTP endpoints exist yet** — `register_routers()` in `main.py` is deliberately empty, and the
+first router arrives with T058. There is intentionally no health-check endpoint, because
+`contracts/rest-api.md` does not contract one (Constitution III).
+
+Check what actually exists under `backend/app/` before assuming a module is present. Each implemented
+task has a beginner-oriented writeup in `docs/tasks/T<id>.md` explaining what it added and why.
 
 The binding engineering standards live in `.specify/memory/constitution.md` and take precedence over
 this file and over `README.md` wherever they disagree. Read it before planning work — it governs
@@ -40,8 +54,19 @@ pip install -r requirements.txt
 `requirements.txt` now lists the full Phase 1 stack: `praw`, FastAPI + `uvicorn`, `celery[redis]`,
 `sqlalchemy` + `alembic` + `asyncpg` + `pgvector`, `pydantic` + `pydantic-settings`, `langchain` +
 `langchain-groq` + `langchain-huggingface` + `sentence-transformers`, `python-dotenv`, `ruff`, and
-`pytest` + `pytest-asyncio` + `pytest-cov`. Add new dependencies here in the same change that imports
-them (Constitution, Technology and Data Constraints).
+`pytest` + `pytest-asyncio` + `pytest-cov`, plus `redis` (imported directly by `app/common/redis.py`
+rather than relied on transitively via `celery[redis]`) and `httpx` (required by
+`fastapi.testclient`). Add new dependencies here in the same change that imports them (Constitution,
+Technology and Data Constraints).
+
+The virtualenv bakes absolute paths into `reddit-env/bin/*`, so **moving or renaming the repository
+directory breaks it** — `source reddit-env/bin/activate` will silently put a nonexistent directory on
+`PATH` and every tool will appear missing. This already happened once, on the `GummySearch` →
+`JammySearch` rename. Either recreate the venv, or repoint it:
+
+```bash
+grep -rl "/old/path" reddit-env/ | xargs sed -i 's|/old/path|/new/path|g'
+```
 
 All settings — including secrets — are read from `.env` at the repo root, and **only**
 `backend/app/config.py` is permitted to read them (other modules import `settings` from there). See
@@ -56,7 +81,11 @@ Build, lint, and test commands, run from `backend/` with `reddit-env` active:
 ruff check . && ruff format --check .          # lint + format, per backend/pyproject.toml
 pytest                                          # full suite; --cov=app with an 80% fail-under gate
 alembic upgrade head                            # apply migrations (none exist yet)
+uvicorn app.main:app --reload                   # run the API (no endpoints yet, /openapi.json works)
 ```
+
+`pyproject.toml` sets `pythonpath = ["."]` under `[tool.pytest.ini_options]` so tests can `import app.*`
+without an installed package or a `sys.path`-editing `conftest.py`.
 
 `docker-compose.yml` at the repo root brings up Postgres (with `pgvector`) and Redis, both bound to
 `127.0.0.1` only:
@@ -64,6 +93,12 @@ alembic upgrade head                            # apply migrations (none exist y
 ```bash
 docker compose up -d
 ```
+
+**Known wrinkle after the directory rename**: Compose derives its project name from the directory, so
+the currently running containers and volumes are still named `gummysearch-*` and `docker compose ps`
+reports nothing from `JammySearch/`. Running `docker compose up -d` would start a second, empty pair
+that cannot bind the ports the first pair holds. Resolve it before the first migration lands, while
+the database is still empty: `docker compose -p gummysearch down -v && docker compose up -d`.
 
 The frontend (`frontend/`, SvelteKit — see below) has its own toolchain:
 
@@ -131,6 +166,29 @@ The backend is organized around 6 modules, each intended to own its own `router.
 
 Cross-cutting rule from the design: **no module besides `reddit/` should call the Reddit API directly** —
 everything else consumes cached/normalized data through the Reddit Data Layer.
+
+### Shared infrastructure in `app/common/` (built, T011–T016)
+
+These exist now, and new module code is expected to use them rather than reinvent equivalents:
+
+- **`database.py`** — the one process-wide async engine, `session_factory`, and `get_session()`, the
+  FastAPI dependency that owns the transaction boundary (commit on success, rollback and re-raise on
+  failure). Services must not commit independently. Every ORM model inherits from its `Base`, which
+  carries a constraint naming convention so Alembic can always name what it drops.
+- **`redis.py`** — the shared client and pool. `get_redis()` returns the *shared* client rather than
+  yielding a per-request one; closing it would tear down the pool for every other caller.
+- **`exceptions.py`** — the `AppError` hierarchy. Raise these rather than `HTTPException`. Pass a
+  specific `code` to a general class (`ConflictError(..., code="audience_limit_reached")`) instead of
+  adding domain subclasses to `common/`.
+- **`middleware.py`** — `install_error_handling(app)`. Every error response is built here, never in a
+  router. Raw exception text never reaches a client; unhandled exceptions log a traceback server-side
+  and return a generic 500.
+- **`pagination.py`** — `PageParams` and the generic `Page[T]` envelope, with a 100-row ceiling that
+  **rejects** rather than clamps. Every collection endpoint returns a `Page`.
+
+Two conventions set by that work: declare FastAPI dependencies as `Annotated[Dep, Depends()]` rather
+than `= Depends()` in an argument default (`ruff` B008), and never add an endpoint that
+`contracts/rest-api.md` does not contract — including a convenience health check.
 
 ### Data flow (planned)
 
