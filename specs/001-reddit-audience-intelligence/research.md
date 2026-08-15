@@ -15,23 +15,40 @@ leaves open, plus the ones the specification's requirements force.
 
 **Decision**: Access the model through a single internal adapter in `app/ai/` that exposes
 `complete()` and `embed()` and hides the vendor SDK from every call site. Pin an explicit model
-identifier in configuration, never a floating alias. Default to the provider already named in
-`README.md`; the adapter makes switching a configuration change rather than a refactor.
+identifier in configuration, never a floating alias. LangChain is the orchestration layer behind the
+adapter — not a general multi-agent framework like CrewAI, which is built for tool-calling delegation
+between autonomous agents and is the wrong shape for single-shot structured completions and RAG.
+`complete()` is backed by Groq (`langchain-groq`) against an open-weight chat model; `embed()` is
+backed by a local HuggingFace `sentence-transformers` model (`langchain-huggingface`), run in-process
+with no network call and no API key. Both were chosen over OpenAI/Anthropic for zero per-token cost at
+single-user scale. The adapter is what makes switching either one later — including back to a paid
+provider — a configuration change rather than a refactor.
 
 **Rationale**: Constitution VII forbids provider aliases that silently re-point, and requires the
 model identifier to be recorded with every result. An adapter is what makes that enforceable in one
 place, and it is what allows the evaluation harness (R12) to run the same eval set against two
-providers to justify a choice with numbers rather than preference.
+providers to justify a choice with numbers rather than preference. LangChain is already named in the
+constitution's Technology and Data Constraints, so routing both providers through it needs no
+amendment. Running embeddings locally also fits R17's local-first deployment posture better than a
+third external network dependency alongside Reddit and Groq would.
 
 **Concrete model identifiers and per-token prices are deliberately not recorded here.** They move
 faster than this document will be revised, and a stale price in a design artifact is worse than no
 price. Verify current identifiers and pricing at the moment of pinning, and record the chosen values
-in configuration plus the plan's Complexity Tracking if they constrain anything.
+in configuration plus the plan's Complexity Tracking if they constrain anything. Groq's free tier is
+still a rate limit, not an unlimited allowance — FR-046's spend ceiling and FR-080's server-side
+enforcement apply to request/token volume even at zero marginal cost.
 
 **Alternatives considered**: Calling the vendor SDK directly from each service — rejected, it
 scatters the model identifier across the codebase and makes Constitution VII's telemetry
 requirement (IX) impossible to satisfy centrally. A general-purpose multi-provider abstraction
-library — rejected as premature; a two-method adapter covers current needs without a dependency.
+library — rejected as premature; LangChain already covers current needs without a second dependency.
+CrewAI for orchestration — rejected; its agent-delegation model solves a problem this feature does not
+have. OpenAI for embeddings and completions, as originally named in `README.md` — rejected on cost
+grounds; revisit only if local embedding quality or Groq's rate limits measurably block a story. The
+hosted HuggingFace Inference API instead of local `sentence-transformers` — rejected for now to avoid
+a third external network dependency and its own rate limits; local inference costs nothing but CPU
+time and keeps embedding fully offline.
 
 ---
 
@@ -385,7 +402,7 @@ approximation of what an embedding already does.
 | Reddit access | PRAW, confined to `app/reddit/` (Constitution I) |
 | Storage | PostgreSQL as system of record; `pgvector` for embeddings; Redis as cache and broker |
 | Background work | Celery with Celery Beat |
-| LLM access | Single internal adapter, explicitly pinned model identifier (R1) |
+| LLM access | Single internal adapter over LangChain; Groq for completions, local `sentence-transformers` for embeddings; explicitly pinned model identifiers (R1) |
 | Frontend | Next.js with a design-token system established first (R10) |
 | Testing | pytest, pytest-asyncio, ruff; externals always mocked (Constitution IV) |
 | Target platform | Linux server, containerized |

@@ -195,7 +195,7 @@ Audiences are lists of subreddits grouped together based on different criterion.
 3. **Feed & Search Engine**
 Consumes data from the Reddit Data Layer and serves it to the frontend in a unified, filterable format. Handles aggregated feed construction across multiple subreddits, advanced keyword search with Boolean support, filtering by timeline, post type, subreddit inclusion/exclusion, and user inclusion/exclusion. Also responsible for deduplication and cross-post detection.
 4. **AI & Analysis Engine**
-The intelligence layer. Responsible for theme tagging, topic extraction, sentiment analysis, pattern detection, comment-level analysis, and the "Ask" feature (RAG-based Q&A over audience posts). Calls out to an LLM (OpenAI / Anthropic) and manages prompt construction, response parsing, and result caching to avoid redundant inference costs.
+The intelligence layer. Responsible for theme tagging, topic extraction, sentiment analysis, pattern detection, comment-level analysis, and the "Ask" feature (RAG-based Q&A over audience posts). Calls out to Groq for chat completions (open-weight models, via LangChain) and embeds locally with a HuggingFace sentence-transformers model, and manages prompt construction, response parsing, and result caching to avoid redundant inference costs.
 5. **Alerts, Notifications & Integrations** *(mostly deferred)*
 Manages keyword alert rules, brand mention tracking, and scheduling logic. In-app alerts are in
 scope; outbound channels — email digests, Slack and Discord webhooks — are deferred.
@@ -257,8 +257,11 @@ graph TD
 - SQLAlchemy + Alembic for ORM and migrations
 - PostgreSQL with the `pgvector` extension as the vector store — no separate vector database, one
   fewer service to run and one fewer index to keep in sync with the source of record
-- LangChain or LlamaIndex for the RAG/Ask pipeline
-- OpenAI SDK for embeddings and completions
+- LangChain for the RAG/Ask pipeline and as the single orchestration layer over model calls
+- Groq (`langchain-groq`) for chat completions against open-weight models — no per-token cost at this
+  scale
+- Local HuggingFace `sentence-transformers` embeddings (`langchain-huggingface`) — runs in-process, no
+  API key, no network call, no cost
 - Pydantic for data validation (already built into FastAPI)
 - pytest + pytest-asyncio for tests, ruff for lint and formatting
 

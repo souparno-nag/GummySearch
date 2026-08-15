@@ -1,4 +1,21 @@
 # Reddit
 praw
+# Web framework
+fastapi
+uvicorn[standard]
+# Background jobs
+celery[redis]
+# Database
+sqlalchemy
+alembic
+asyncpg
+pgvector
+# Validation
+pydantic
+# AI / LLM orchestration — Groq for completions, local sentence-transformers for embeddings (R1)
+langchain
+langchain-groq
+langchain-huggingface
+sentence-transformers
 # Python environment
 python-dotenv
