@@ -45,6 +45,7 @@ source = ["app"]
 branch = true
 omit = [
     "app/ai/prompts/*",  # versioned prompt text, not executable logic
+    "app/config.py",     # declarative settings loading — Constitution IV's "thin glue code"
 ]
 
 [tool.coverage.report]

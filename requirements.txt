@@ -12,6 +12,7 @@ asyncpg
 pgvector
 # Validation
 pydantic
+pydantic-settings
 # AI / LLM orchestration — Groq for completions, local sentence-transformers for embeddings (R1)
 langchain
 langchain-groq
