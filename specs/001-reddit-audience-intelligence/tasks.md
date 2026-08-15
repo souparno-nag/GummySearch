@@ -61,7 +61,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 - [X] T012 [P] Implement the Redis connection pool in backend/app/common/redis.py
 - [X] T013 [P] Define typed exception classes in backend/app/common/exceptions.py
 - [X] T014 Implement error-envelope middleware translating typed exceptions to the shared error shape in backend/app/common/middleware.py
-- [ ] T015 [P] Implement the shared pagination envelope and max page size in backend/app/common/pagination.py
+- [X] T015 [P] Implement the shared pagination envelope and max page size in backend/app/common/pagination.py
 - [ ] T016 Create the FastAPI application and router registration in backend/app/main.py
 
 ### Deployment posture (FR-078–FR-081)
