@@ -41,8 +41,14 @@ class Settings(BaseSettings):
     embedding_model_name: str = Field(alias="EMBEDDING_MODEL_NAME")
 
     # Deployment exposure (FR-078). Binding beyond loopback requires this explicit opt-in;
-    # the startup bind guard built in T017-T018 reads this flag rather than the raw env var.
+    # the startup bind guard in app/main.py reads this flag rather than the raw env var.
     allow_remote_exposure: bool = Field(default=False, alias="ALLOW_REMOTE_EXPOSURE")
+
+    # The interface the application is expected to bind. Consulted by the same guard when
+    # the server is started programmatically, i.e. with no uvicorn `--host` on the command
+    # line to read. The default is what makes loopback-only the behaviour you get by doing
+    # nothing, which is the whole point of FR-078.
+    app_host: str = Field(default="127.0.0.1", alias="APP_HOST")
 
 
 @lru_cache
