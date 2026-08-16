@@ -70,7 +70,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 
 - [X] T017 [P] Write failing tests for the startup bind guard in backend/tests/unit/test_bind_guard.py
 - [X] T018 Implement the loopback-by-default bind guard that refuses a non-local interface without the explicit exposure flag in backend/app/main.py
-- [ ] T019 [P] Write failing tests for credential hashing and session expiry in backend/tests/unit/test_auth_service.py
+- [X] T019 [P] Write failing tests for credential hashing and session expiry in backend/tests/unit/test_auth_service.py
 - [ ] T020 Implement hashed credential storage, expiring and invalidatable sessions in backend/app/users/auth_service.py
 - [ ] T021 Implement the current_user dependency in backend/app/dependencies.py
 - [ ] T022 Implement server-side rate limiting applied to every paid-call endpoint in backend/app/common/limits.py
