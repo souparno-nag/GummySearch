@@ -12,7 +12,7 @@ expiry is asserted exactly rather than slept for (Constitution IV forbids both a
 test and a nondeterministic one).
 """
 
-from datetime import UTC
+from datetime import UTC, timedelta
 
 import pytest
 
@@ -182,14 +182,19 @@ async def test_expiry_is_enforced_by_this_module_not_only_by_redis(fake_redis):
     # Defence in depth. Redis TTL is the mechanism that stops expired sessions
     # accumulating, but a stale entry surviving eviction — or a store that lost its TTLs —
     # must not authenticate anybody. The application checks the deadline itself.
-    session = await create_session(fake_redis, "researcher")
+    #
+    # `now` is passed explicitly rather than slept for: Constitution IV requires wall-clock
+    # time to be frozen, and it is what lets this assert the application's own check rather
+    # than the fake store's.
+    created_at = auth.utc_now()
+    session = await create_session(fake_redis, "researcher", now=created_at)
     stored_key = [key async for key in fake_redis.scan_iter()][0]
     value = await fake_redis.get(stored_key)
     await fake_redis.set(stored_key, value)  # re-store with no TTL at all
 
-    fake_redis.clock.advance(auth.settings.session_ttl_seconds + 1)
+    after_expiry = created_at + timedelta(seconds=auth.settings.session_ttl_seconds + 1)
 
-    assert await get_session(fake_redis, session.token) is None
+    assert await get_session(fake_redis, session.token, now=after_expiry) is None
 
 
 async def test_the_stored_session_carries_a_ttl(fake_redis):
@@ -198,6 +203,36 @@ async def test_the_stored_session_carries_a_ttl(fake_redis):
     stored_key = [key async for key in fake_redis.scan_iter()][0]
 
     assert await fake_redis.ttl(stored_key) > 0
+
+
+@pytest.mark.parametrize("empty", ["", None])
+async def test_a_missing_token_resolves_to_nothing_without_touching_the_store(fake_redis, empty):
+    # A request arriving with no session cookie at all is the common case, not an error.
+    assert await get_session(fake_redis, empty) is None
+    assert await invalidate_session(fake_redis, empty) is False
+
+
+async def test_an_unreadable_session_entry_is_discarded_rather_than_raising(fake_redis):
+    # If something ever writes a malformed value under a session key, sign-in must degrade
+    # to "not signed in" rather than 500 on every authenticated request until it is cleared.
+    session = await create_session(fake_redis, "researcher")
+    stored_key = [key async for key in fake_redis.scan_iter()][0]
+    await fake_redis.set(stored_key, "{not json at all")
+
+    assert await get_session(fake_redis, session.token) is None
+    assert await fake_redis.get(stored_key) is None  # and the bad entry is gone
+
+
+async def test_a_session_entry_missing_its_fields_is_discarded(fake_redis):
+    session = await create_session(fake_redis, "researcher")
+    stored_key = [key async for key in fake_redis.scan_iter()][0]
+    await fake_redis.set(stored_key, '{"username": "researcher"}')
+
+    assert await get_session(fake_redis, session.token) is None
+
+
+async def test_invalidating_all_sessions_when_there_are_none_is_not_an_error(fake_redis):
+    assert await invalidate_all_sessions(fake_redis) == 0
 
 
 async def test_a_session_can_be_invalidated_before_it_expires(fake_redis):

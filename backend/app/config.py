@@ -44,6 +44,18 @@ class Settings(BaseSettings):
     # the startup bind guard in app/main.py reads this flag rather than the raw env var.
     allow_remote_exposure: bool = Field(default=False, alias="ALLOW_REMOTE_EXPOSURE")
 
+    # Sign-in (FR-048, R11). Single user, credentials in configuration, no self-service
+    # registration. `auth_password_hash` holds a *hash* produced by
+    # `app.users.auth_service.hash_password` — never a plaintext password (FR-079). It
+    # defaults to empty, and an empty value means nobody can sign in: "no credential
+    # configured" must fail closed rather than read as "no credential required".
+    auth_username: str = Field(default="researcher", alias="AUTH_USERNAME")
+    auth_password_hash: str = Field(default="", alias="AUTH_PASSWORD_HASH")
+
+    # How long a session stays valid. Twelve hours: long enough to cover a working day
+    # without re-authenticating, short enough that a forgotten session is not indefinite.
+    session_ttl_seconds: int = Field(default=43_200, alias="SESSION_TTL_SECONDS")
+
     # The interface the application is expected to bind. Consulted by the same guard when
     # the server is started programmatically, i.e. with no uvicorn `--host` on the command
     # line to read. The default is what makes loopback-only the behaviour you get by doing
