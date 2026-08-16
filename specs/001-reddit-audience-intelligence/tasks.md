@@ -68,7 +68,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 
 > Built now because every one of these is cheap first and a migration later.
 
-- [ ] T017 [P] Write failing tests for the startup bind guard in backend/tests/unit/test_bind_guard.py
+- [X] T017 [P] Write failing tests for the startup bind guard in backend/tests/unit/test_bind_guard.py
 - [ ] T018 Implement the loopback-by-default bind guard that refuses a non-local interface without the explicit exposure flag in backend/app/main.py
 - [ ] T019 [P] Write failing tests for credential hashing and session expiry in backend/tests/unit/test_auth_service.py
 - [ ] T020 Implement hashed credential storage, expiring and invalidatable sessions in backend/app/users/auth_service.py
