@@ -94,11 +94,16 @@ without an installed package or a `sys.path`-editing `conftest.py`.
 docker compose up -d
 ```
 
-**Known wrinkle after the directory rename**: Compose derives its project name from the directory, so
-the currently running containers and volumes are still named `gummysearch-*` and `docker compose ps`
-reports nothing from `JammySearch/`. Running `docker compose up -d` would start a second, empty pair
-that cannot bind the ports the first pair holds. Resolve it before the first migration lands, while
-the database is still empty: `docker compose -p gummysearch down -v && docker compose up -d`.
+Compose derives its project name from the directory, so the `GummySearch` → `JammySearch` rename
+orphaned the original `gummysearch-*` containers and volumes: they kept holding ports 5432 and 6379
+while `docker compose ps` from `JammySearch/` reported nothing. **Resolved on 2026-08-16**, while the
+database was still empty, with `docker compose -p gummysearch down -v && docker compose up -d`. The
+containers are now `jammysearch-postgres-1` and `jammysearch-redis-1` on fresh `jammysearch_*`
+volumes.
+
+The diagnostic worth keeping from this and from T005: in `docker compose ps`, a bare `5432/tcp` with
+no `host:port->` arrow means the port publish failed while the container still reports healthy — not
+that the container is down.
 
 The frontend (`frontend/`, SvelteKit — see below) has its own toolchain:
 
