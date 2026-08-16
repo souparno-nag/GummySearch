@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     # without re-authenticating, short enough that a forgotten session is not indefinite.
     session_ttl_seconds: int = Field(default=43_200, alias="SESSION_TTL_SECONDS")
 
+    # Default request-rate allowance for endpoints that can trigger a paid call (FR-080).
+    # Generous for one person working normally, low enough to stop a runaway loop from
+    # exhausting a provider's free tier before anyone notices.
+    rate_limit_requests: int = Field(default=60, alias="RATE_LIMIT_REQUESTS")
+    rate_limit_window_seconds: int = Field(default=60, alias="RATE_LIMIT_WINDOW_SECONDS")
+
     # The interface the application is expected to bind. Consulted by the same guard when
     # the server is started programmatically, i.e. with no uvicorn `--host` on the command
     # line to read. The default is what makes loopback-only the behaviour you get by doing
