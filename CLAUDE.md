@@ -24,11 +24,24 @@ What *is* real:
   envelope and the enforced 100-row ceiling). `backend/app/main.py` is a real FastAPI app that boots
   under `uvicorn app.main:app`, with a lifespan that closes both pools on shutdown.
 
-The rest of Phase 2 (T017–T047) has not started: no bind guard, no auth, no rate limiting, no ORM
-models or migrations, no Celery, no telemetry, and the Reddit data layer still only has `client.py`.
-**No HTTP endpoints exist yet** — `register_routers()` in `main.py` is deliberately empty, and the
-first router arrives with T058. There is intentionally no health-check endpoint, because
-`contracts/rest-api.md` does not contract one (Constitution III).
+- **Phase 2's deployment-posture block (T017–T022) is complete** — `main.py` carries the startup bind
+  guard (loopback by default; a non-local bind without `ALLOW_REMOTE_EXPOSURE` refuses to start and
+  explains why, and it reads uvicorn's `--host` rather than only configuration).
+  `backend/app/users/auth_service.py` holds scrypt credential hashing plus expiring, invalidatable
+  sessions stored in Redis under a *digest* of the token. `backend/app/dependencies.py` exposes
+  `CurrentUser`, resolved from an `HttpOnly` cookie. `backend/app/common/limits.py` enforces
+  fixed-window request rate limits per caller and per bucket, refusing rather than advising (FR-080).
+
+The rest of Phase 2 (T023–T047) has not started: no ORM models or migrations, no Celery, no telemetry,
+and the Reddit data layer still only has `client.py`. **No HTTP endpoints exist yet** —
+`register_routers()` in `main.py` is deliberately empty, and the first router arrives with T058. There
+is intentionally no health-check endpoint, because `contracts/rest-api.md` does not contract one
+(Constitution III).
+
+**There is also no sign-in endpoint, and that is not an oversight.** The contract requires every
+endpoint to carry a session but contracts no route that issues one, so sessions can currently only be
+created by calling `create_session` directly. Adding the route requires updating
+`contracts/rest-api.md` first, in the same change set (Constitution III) — do not improvise it.
 
 Check what actually exists under `backend/app/` before assuming a module is present. Each implemented
 task has a beginner-oriented writeup in `docs/tasks/T<id>.md` explaining what it added and why.
@@ -191,9 +204,29 @@ These exist now, and new module code is expected to use them rather than reinven
 - **`pagination.py`** — `PageParams` and the generic `Page[T]` envelope, with a 100-row ceiling that
   **rejects** rather than clamps. Every collection endpoint returns a `Page`.
 
+- **`limits.py`** — `consume_rate_limit`, plus the `rate_limit(...)` and `paid_call_rate_limit(...)`
+  dependencies. Attach one to any endpoint that can trigger a paid call. It **refuses**; it never
+  merely reports remaining allowance, because FR-080 requires a client that ignores the check to still
+  be bound by it.
+
 Two conventions set by that work: declare FastAPI dependencies as `Annotated[Dep, Depends()]` rather
 than `= Depends()` in an argument default (`ruff` B008), and never add an endpoint that
 `contracts/rest-api.md` does not contract — including a convenience health check.
+
+### Auth and request gating (built, T017–T022)
+
+- **`app/users/auth_service.py`** — `hash_password` / `verify_password` (scrypt from the standard
+  library, deliberately not bcrypt or argon2, which sit outside the constitution's committed stack and
+  would need the amendment procedure), `authenticate` against the configured credential, and the
+  session lifecycle. An empty `AUTH_PASSWORD_HASH` denies everyone: an unconfigured credential fails
+  closed rather than reading as "no credential required".
+- **`app/dependencies.py`** — `CurrentUser`. Write `user: CurrentUser` on a route and authentication
+  is handled; every failure mode returns the same 401 so a caller cannot probe which tokens existed.
+- Sessions are stored in Redis under a SHA-256 digest of the token, so a leaked dump or backup yields
+  no usable session, and expiry is checked by the application as well as by the Redis TTL.
+
+Tests mock Redis with `FakeRedis` and `FakeClock` from `backend/tests/conftest.py` — use those rather
+than writing a new stand-in, and pass `now` explicitly instead of sleeping (Constitution IV).
 
 ### Data flow (planned)
 
