@@ -75,16 +75,16 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 - [X] T021 Implement the current_user dependency in backend/app/dependencies.py
 - [X] T022 Implement server-side rate limiting applied to every paid-call endpoint in backend/app/common/limits.py
 
-> **T022a–T022d were added after T022 shipped.** T017–T022 built everything needed to *carry* a session
-> but nothing that *issues* one: `contracts/rest-api.md` required every endpoint to be authenticated and
-> contracted no route to sign in, so `CurrentUser` was unsatisfiable over HTTP and T058 was blocked.
-> Lettered rather than renumbered, because inserting a task here would renumber T023–T160 and every
-> reference to them in this file.
+> **T177–T180 were added after T022 shipped**, and belong to this block rather than to the end of the
+> file — they take the next free IDs per the numbering rule above and run here in document order.
+> T017–T022 built everything needed to *carry* a session but nothing that *issues* one:
+> `contracts/rest-api.md` required every endpoint to be authenticated and contracted no route to sign
+> in, so `CurrentUser` was unsatisfiable over HTTP and T058 was blocked.
 
-- [X] T022a Amend the API contract with the session endpoints in specs/001-reddit-audience-intelligence/contracts/rest-api.md
-- [X] T022b [P] Write failing tests for the session endpoints in backend/tests/integration/test_auth_routes.py
-- [ ] T022c Implement the client-keyed rate limiter for unauthenticated endpoints in backend/app/common/limits.py
-- [ ] T022d Implement the sign-in, sign-out, and current-session routes in backend/app/users/router.py
+- [X] T177 Amend the API contract with the session endpoints in specs/001-reddit-audience-intelligence/contracts/rest-api.md
+- [X] T178 [P] Write failing tests for the session endpoints in backend/tests/integration/test_auth_routes.py
+- [ ] T179 Implement the client-keyed rate limiter for unauthenticated endpoints in backend/app/common/limits.py
+- [ ] T180 Implement the sign-in, sign-out, and current-session routes in backend/app/users/router.py
 
 ### Reddit data layer (Constitution I)
 
