@@ -16,6 +16,8 @@ the success path of a sign-in endpoint is the easy half.
 Redis is the in-memory fake from `tests/conftest.py`; no test contacts a real service.
 """
 
+from datetime import datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -70,10 +72,12 @@ def test_signing_in_with_the_configured_credential_succeeds(client):
 
 def test_signing_in_reports_when_the_session_expires(client):
     # Constitution V fixes UTC ISO 8601 on the wire, so a client can show the user how long
-    # they have without guessing the server's TTL.
-    body = sign_in(client).json()
+    # they have without guessing the server's TTL. Asserted by parsing rather than by matching
+    # a suffix: "Z" and "+00:00" are both valid UTC, and which one Pydantic emits is not the
+    # property worth pinning.
+    expires_at = datetime.fromisoformat(sign_in(client).json()["expires_at"])
 
-    assert body["expires_at"].endswith("+00:00")
+    assert expires_at.utcoffset() == timedelta(0)
 
 
 def test_signing_in_sets_the_session_cookie(client):
@@ -91,9 +95,9 @@ def test_the_session_cookie_is_not_readable_by_page_scripts(client):
 
 
 def test_the_session_cookie_is_not_sent_on_cross_site_requests(client):
-    header = sign_in(client).headers["set-cookie"]
+    header = sign_in(client).headers["set-cookie"].lower()
 
-    assert "SameSite=Lax" in header
+    assert "samesite=lax" in header
 
 
 def test_the_session_token_is_never_in_the_response_body(client):

@@ -32,16 +32,23 @@ What *is* real:
   `CurrentUser`, resolved from an `HttpOnly` cookie. `backend/app/common/limits.py` enforces
   fixed-window request rate limits per caller and per bucket, refusing rather than advising (FR-080).
 
-The rest of Phase 2 (T023–T047) has not started: no ORM models or migrations, no Celery, no telemetry,
-and the Reddit data layer still only has `client.py`. **No HTTP endpoints exist yet** —
-`register_routers()` in `main.py` is deliberately empty, and the first router arrives with T058. There
-is intentionally no health-check endpoint, because `contracts/rest-api.md` does not contract one
-(Constitution III).
+- **The session endpoints (T177–T180) are complete.** These four tasks were added to the
+  deployment-posture block after T022 shipped, because T017–T022 built everything needed to *carry* a
+  session and nothing that *issues* one. `contracts/rest-api.md` gained a "Sessions" section, and
+  `backend/app/users/router.py` now serves `POST` / `GET` / `DELETE /auth/session` — **the only three
+  endpoints exempt from requiring a session, and the contract states that list is exhaustive.**
+  `backend/app/users/schemas.py` holds their Pydantic models. This is the first router registered in
+  `main.py`.
 
-**There is also no sign-in endpoint, and that is not an oversight.** The contract requires every
-endpoint to carry a session but contracts no route that issues one, so sessions can currently only be
-created by calling `create_session` directly. Adding the route requires updating
-`contracts/rest-api.md` first, in the same change set (Constitution III) — do not improvise it.
+The rest of Phase 2 (T023–T047) has not started: no ORM models or migrations, no Celery, no telemetry,
+and the Reddit data layer still only has `client.py`. The only HTTP endpoints that exist are the three
+session routes above; the audiences router arrives with T058. There is intentionally no health-check
+endpoint, because `contracts/rest-api.md` does not contract one (Constitution III).
+
+**`AUTH_PASSWORD_HASH` is empty in a fresh checkout, which means nobody can sign in.** That is
+fail-closed by design, not a bug — an unconfigured credential must never read as "no credential
+required". Generate one with the documented one-liner in `.env.example`. The test suite supplies its own
+hashed credential through a fixture, so it never depends on a local `.env`.
 
 Check what actually exists under `backend/app/` before assuming a module is present. Each implemented
 task has a beginner-oriented writeup in `docs/tasks/T<id>.md` explaining what it added and why.
@@ -207,13 +214,15 @@ These exist now, and new module code is expected to use them rather than reinven
 - **`limits.py`** — `consume_rate_limit`, plus the `rate_limit(...)` and `paid_call_rate_limit(...)`
   dependencies. Attach one to any endpoint that can trigger a paid call. It **refuses**; it never
   merely reports remaining allowance, because FR-080 requires a client that ignores the check to still
-  be bound by it.
+  be bound by it. `signin_rate_limit()` is the variant for endpoints with no signed-in caller — it keys
+  on the client address because `rate_limit` resolves `CurrentUser` first, and it deliberately ignores
+  `X-Forwarded-For`, which a caller can set to mint a fresh subject per attempt.
 
 Two conventions set by that work: declare FastAPI dependencies as `Annotated[Dep, Depends()]` rather
 than `= Depends()` in an argument default (`ruff` B008), and never add an endpoint that
 `contracts/rest-api.md` does not contract — including a convenience health check.
 
-### Auth and request gating (built, T017–T022)
+### Auth and request gating (built, T017–T022, T177–T180)
 
 - **`app/users/auth_service.py`** — `hash_password` / `verify_password` (scrypt from the standard
   library, deliberately not bcrypt or argon2, which sit outside the constitution's committed stack and
@@ -222,8 +231,16 @@ than `= Depends()` in an argument default (`ruff` B008), and never add an endpoi
   closed rather than reading as "no credential required".
 - **`app/dependencies.py`** — `CurrentUser`. Write `user: CurrentUser` on a route and authentication
   is handled; every failure mode returns the same 401 so a caller cannot probe which tokens existed.
+- **`app/users/router.py`** — `POST` / `GET` / `DELETE /auth/session`, with their Pydantic models in
+  `app/users/schemas.py`. Sign-in returns the username and expiry and puts the token **only** in an
+  `HttpOnly` cookie, never in the body. Every sign-in failure — wrong password, unknown username,
+  unconfigured credential — returns a byte-identical 401. Sign-out is not behind `CurrentUser` (an
+  already-expired session must still be able to sign out) and returns 204 either way.
 - Sessions are stored in Redis under a SHA-256 digest of the token, so a leaked dump or backup yields
-  no usable session, and expiry is checked by the application as well as by the Redis TTL.
+  no usable session, and expiry is checked by the application as well as by the Redis TTL. Constitution
+  v1.3.0 explicitly permits this: sessions and rate-limit windows are named as ephemeral operational
+  state, exempt from "no durable data may exist only in Redis". Nothing else may claim that exemption
+  without amending the constitution.
 
 Tests mock Redis with `FakeRedis` and `FakeClock` from `backend/tests/conftest.py` — use those rather
 than writing a new stand-in, and pass `now` explicitly instead of sleeping (Constitution IV).

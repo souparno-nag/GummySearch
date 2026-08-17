@@ -47,14 +47,16 @@ def test_error_handling_is_installed():
     assert response.json()["error"]["code"] == "not_found"
 
 
-def test_no_endpoints_are_exposed_yet():
+def test_only_contracted_endpoints_are_exposed():
     # contracts/rest-api.md is the single source of truth for the HTTP surface
     # (Constitution III). Nothing may appear here ahead of the task that contracts it —
-    # including a convenience health check.
+    # including a convenience health check. `/auth/session` is contracted under "Sessions".
+    # Asserted against the generated OpenAPI schema rather than the route table: that schema
+    # is what the frontend and the docs are written against, so it is the surface the contract
+    # is actually a contract for.
     built = create_app()
-    paths = {route.path for route in built.routes}
 
-    assert paths <= {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+    assert set(built.openapi()["paths"]) == {"/auth/session"}
 
 
 async def test_startup_does_not_connect_to_anything(monkeypatch):

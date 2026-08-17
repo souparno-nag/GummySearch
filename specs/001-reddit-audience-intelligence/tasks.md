@@ -84,7 +84,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 - [X] T177 Amend the API contract with the session endpoints in specs/001-reddit-audience-intelligence/contracts/rest-api.md
 - [X] T178 [P] Write failing tests for the session endpoints in backend/tests/integration/test_auth_routes.py
 - [X] T179 Implement the client-keyed rate limiter for unauthenticated endpoints in backend/app/common/limits.py
-- [ ] T180 Implement the sign-in, sign-out, and current-session routes in backend/app/users/router.py
+- [X] T180 Implement the sign-in, sign-out, and current-session routes in backend/app/users/router.py
 
 ### Reddit data layer (Constitution I)
 

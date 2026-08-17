@@ -7,8 +7,8 @@ the connection pools created in `app/common/database.py` and `app/common/redis.p
 has to exist. It is built by `create_app()` rather than assembled inline so tests can
 construct an isolated instance instead of mutating the shared one.
 
-Routers are registered in `register_routers()`. It is empty for now because no module
-has one yet — the first arrives with the audiences router in T058.
+Routers are registered in `register_routers()`. It currently carries only the users
+router's three session endpoints (T180); the audiences router arrives with T058.
 
 This module also owns the startup bind guard (FR-078, R17). It runs during `create_app()`,
 so an unsafe bind stops the process before uvicorn ever opens a socket.
@@ -26,6 +26,7 @@ from app.common.database import dispose_engine
 from app.common.middleware import install_error_handling
 from app.common.redis import close_redis
 from app.config import settings
+from app.users.router import router as users_router
 
 logger = logging.getLogger(__name__)
 
@@ -143,10 +144,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 def register_routers(app: FastAPI) -> None:
     """Attach every module's router to the application.
 
-    Each of the six modules owns exactly one router, added here as it is built. Nothing
-    is registered yet; `contracts/rest-api.md` remains the single source of truth for the
-    HTTP surface, so no endpoint exists until the task that contracts it lands.
+    Each of the six modules owns exactly one router, added here as it is built.
+    `contracts/rest-api.md` remains the single source of truth for the HTTP surface, so no
+    endpoint may appear here ahead of the task that contracts it.
+
+    The users router carries the three session endpoints — the only routes exempt from
+    requiring a session, because they are what issues one.
     """
+    app.include_router(users_router)
 
 
 def create_app() -> FastAPI:
