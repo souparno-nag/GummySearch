@@ -82,7 +82,7 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 > reference to them in this file.
 
 - [X] T022a Amend the API contract with the session endpoints in specs/001-reddit-audience-intelligence/contracts/rest-api.md
-- [ ] T022b [P] Write failing tests for the session endpoints in backend/tests/integration/test_auth_routes.py
+- [X] T022b [P] Write failing tests for the session endpoints in backend/tests/integration/test_auth_routes.py
 - [ ] T022c Implement the client-keyed rate limiter for unauthenticated endpoints in backend/app/common/limits.py
 - [ ] T022d Implement the sign-in, sign-out, and current-session routes in backend/app/users/router.py
 

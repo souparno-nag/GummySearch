@@ -88,9 +88,11 @@ Failure behaviour, all of it load-bearing rather than incidental:
 - A wrong password, an unknown username, and an unconfigured `AUTH_PASSWORD_HASH` MUST return the
   **same** `401` with code `not_authenticated` and the same message. Distinguishing them would tell an
   unauthenticated caller which usernames exist, or that the deployment has no credential set.
-- Repeated failures return `429` with code `rate_limited` and `retry_after_seconds`. The limit is keyed
-  on the calling client rather than on a session, since sign-in is where no session exists yet. FR-081
-  defers *network-level* brute-force protection; this is an application-level control and stays.
+- Sign-in **attempts** are rate-limited, and exceeding the allowance returns `429` with code
+  `rate_limited` and `retry_after_seconds`. Attempts are counted regardless of outcome, not failures
+  only: the control must bound the endpoint even for a caller who ignores what it returns. The limit is
+  keyed on the calling client rather than on a session, since sign-in is where no session exists yet.
+  FR-081 defers *network-level* brute-force protection; this is an application-level control and stays.
 - `DELETE` returns `204` whether or not the cookie named a live session — reporting the difference would
   confirm that a token was valid. It is therefore idempotent.
 - `GET` without a cookie, or with an expired, unknown, or invalidated one, returns the standard `401`.
