@@ -44,16 +44,60 @@ exception text never reach the client (Constitution V).
 
 **Freshness** — any response derived from collected material carries `last_refreshed_at` (FR-013).
 
-**Auth** — session-based, single user (R11). All endpoints require an authenticated session; there is
-no registration endpoint. Sessions expire and can be invalidated, and credentials are stored hashed,
-because the application is written to public-exposure standard even though it binds to loopback in
-this release (FR-078, FR-079).
+**Auth** — session-based, single user (R11). All endpoints require an authenticated session **except
+the three session endpoints below**: `POST /auth/session` and `DELETE /auth/session` are open by
+necessity, and `GET /auth/session` is open so that an unauthenticated caller receives a `401` rather
+than being unable to ask. That list is exhaustive — no other endpoint may be exempted without amending
+this file. There is no registration endpoint. Sessions expire and can be invalidated, and credentials
+are stored hashed, because the application is written to public-exposure standard even though it binds
+to loopback in this release (FR-078, FR-079).
 
 **Limits** — spend ceilings and request rate limits are enforced server-side on every endpoint that
 can trigger a paid call, never by the client (FR-080). A client that omits the check must not be able
 to exceed them.
 
 ---
+
+## Sessions (FR-048, FR-079)
+
+Not part of any user story: every story depends on being signed in, so these are cross-cutting. They
+are the only endpoints that establish or end a session, and the only ones exempt from carrying one.
+
+| Method | Path | Purpose | Requirements |
+|---|---|---|---|
+| `POST` | `/auth/session` | Sign in; sets the `HttpOnly` session cookie | FR-048, FR-079 |
+| `DELETE` | `/auth/session` | Sign out, invalidating the session immediately | FR-079 |
+| `GET` | `/auth/session` | The current session's username and expiry | FR-048 |
+
+`POST` carries `{"username": ..., "password": ...}` and returns `{"username": ..., "expires_at": ...}`.
+
+**The session token appears only in the `Set-Cookie` header, never in a response body**, because
+FR-079 requires secrets to be unreadable by the client:
+
+```
+Set-Cookie: jammysearch_session=<token>; HttpOnly; SameSite=Lax; Path=/; Max-Age=<session TTL>
+```
+
+`Secure` is deliberately absent: this release serves plain HTTP on loopback, and FR-081 defers
+transport security to the deployment layer. It becomes **mandatory** the moment `ALLOW_REMOTE_EXPOSURE`
+is used, since without it the cookie would travel in clear text — a change to this contract and to the
+route, not a deployment setting.
+
+Failure behaviour, all of it load-bearing rather than incidental:
+
+- A wrong password, an unknown username, and an unconfigured `AUTH_PASSWORD_HASH` MUST return the
+  **same** `401` with code `not_authenticated` and the same message. Distinguishing them would tell an
+  unauthenticated caller which usernames exist, or that the deployment has no credential set.
+- Sign-in **attempts** are rate-limited, and exceeding the allowance returns `429` with code
+  `rate_limited` and `retry_after_seconds`. Attempts are counted regardless of outcome, not failures
+  only: the control must bound the endpoint even for a caller who ignores what it returns. The limit is
+  keyed on the calling client rather than on a session, since sign-in is where no session exists yet.
+  FR-081 defers *network-level* brute-force protection; this is an application-level control and stays.
+- `DELETE` returns `204` whether or not the cookie named a live session — reporting the difference would
+  confirm that a token was valid. It is therefore idempotent.
+- `GET` without a cookie, or with an expired, unknown, or invalidated one, returns the standard `401`.
+  The client uses this on load to decide whether to show the sign-in screen, instead of provoking a
+  `401` on a data route.
 
 ## Audiences — User Story 1
 

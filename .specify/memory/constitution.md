@@ -1,7 +1,38 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.2.2 → 1.2.3
+Version change: 1.2.3 → 1.3.0
+Rationale: MINOR. The Technology and Data Constraints section gains guidance it did
+not have: an explicit exemption to "no data may exist only in Redis" for ephemeral
+operational state. The rule was written to protect the collected corpus, which costs
+Reddit quota to gather and cannot be re-fetched at will, but as worded it also
+condemned two categories of state whose loss costs nothing of the kind — sessions and
+rate-limit counters. Read strictly, it required session rows and per-window request
+counters in PostgreSQL, which no design intends and which would put a write on the
+system of record in front of every single request.
+
+The exemption is bounded by a test, not by judgment: state qualifies only if it
+reconstructs itself on the next request or costs a user one ordinary action to
+recreate, and only the two named instances qualify today. Anything further needs its
+own amendment.
+
+Modified sections:
+  - Technology and Data Constraints — the Redis rule now states what it protects
+    (system of record and collected material) and names the ephemeral exemption,
+    its test, and its two instances.
+
+Added sections: none. Removed sections: none. Principles I–IX unchanged.
+
+No previously compliant code becomes non-compliant. The amendment legitimizes code
+already shipped under T020 (sessions in `backend/app/users/auth_service.py`) and T022
+(rate-limit windows in `backend/app/common/limits.py`), each of which had been
+carrying the reasoning in a module docstring as a contestable reading. Those hedges
+are corrected to cite this section.
+
+Deferred TODOs: none
+
+--- Carried forward from 1.2.3 ---
+
 Rationale: PATCH. Principle III now names the feature's `contracts/rest-api.md` as
 the single source of truth for the HTTP surface, rather than `README.md`. Raised by
 finding D1 of the cross-artifact analysis: the contract file did not exist when the
@@ -310,10 +341,26 @@ and credentials MUST be read from `.env` via configuration objects — hardcoded
 `os.environ` reads scattered through modules are prohibited, and `.env` MUST remain gitignored.
 
 PostgreSQL is the system of record, and it holds the embeddings. Redis is a cache and Celery broker
-and MUST be treated as reconstructible from PostgreSQL, so no data may exist only in Redis. All schema
-changes MUST ship as Alembic migrations — never as manual DDL or as `create_all()` against a real
-database. Database access from request handlers MUST use the async SQLAlchemy session; blocking I/O in
-an async path is prohibited.
+and MUST be treated as reconstructible from PostgreSQL, so no durable data may exist only in Redis.
+This rule governs the system of record and all collected material — posts, comments, communities,
+embeddings, and analysis results — none of which may be re-fetched at will, because Principle I exists
+precisely to protect the quota that collecting them costs.
+
+**Ephemeral operational state is exempt** and MAY live only in Redis. State qualifies as ephemeral only
+if it reconstructs itself on the next request, or if a user recreates it with a single ordinary action;
+losing all of it MUST cost no collected material and no user-authored data. Two instances qualify, and
+they are named here so the exemption is a test rather than an interpretation:
+
+- **Session entries** (`backend/app/users/auth_service.py`) — losing every session costs one sign-in.
+- **Rate-limit windows** (`backend/app/common/limits.py`) — a lost counter is refilled by the next
+  request in the window.
+
+Anything else claiming this exemption requires an amendment naming it. A durable record kept only in
+Redis because it happens to be convenient there remains prohibited.
+
+All schema changes MUST ship as Alembic migrations — never as manual DDL or as `create_all()` against a
+real database. Database access from request handlers MUST use the async SQLAlchemy session; blocking
+I/O in an async path is prohibited.
 
 ## Development Workflow and Quality Gates
 
@@ -362,4 +409,4 @@ justification is written into the change description and a follow-up task to rem
 undocumented violations MUST be reverted or fixed rather than grandfathered. `CLAUDE.md` remains the
 source of runtime development guidance and MUST stay consistent with this constitution.
 
-**Version**: 1.2.3 | **Ratified**: 2026-08-14 | **Last Amended**: 2026-08-14
+**Version**: 1.3.0 | **Ratified**: 2026-08-14 | **Last Amended**: 2026-08-17

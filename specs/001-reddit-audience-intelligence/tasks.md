@@ -68,12 +68,23 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 
 > Built now because every one of these is cheap first and a migration later.
 
-- [ ] T017 [P] Write failing tests for the startup bind guard in backend/tests/unit/test_bind_guard.py
-- [ ] T018 Implement the loopback-by-default bind guard that refuses a non-local interface without the explicit exposure flag in backend/app/main.py
-- [ ] T019 [P] Write failing tests for credential hashing and session expiry in backend/tests/unit/test_auth_service.py
-- [ ] T020 Implement hashed credential storage, expiring and invalidatable sessions in backend/app/users/auth_service.py
-- [ ] T021 Implement the current_user dependency in backend/app/dependencies.py
-- [ ] T022 Implement server-side rate limiting applied to every paid-call endpoint in backend/app/common/limits.py
+- [X] T017 [P] Write failing tests for the startup bind guard in backend/tests/unit/test_bind_guard.py
+- [X] T018 Implement the loopback-by-default bind guard that refuses a non-local interface without the explicit exposure flag in backend/app/main.py
+- [X] T019 [P] Write failing tests for credential hashing and session expiry in backend/tests/unit/test_auth_service.py
+- [X] T020 Implement hashed credential storage, expiring and invalidatable sessions in backend/app/users/auth_service.py
+- [X] T021 Implement the current_user dependency in backend/app/dependencies.py
+- [X] T022 Implement server-side rate limiting applied to every paid-call endpoint in backend/app/common/limits.py
+
+> **T177–T180 were added after T022 shipped**, and belong to this block rather than to the end of the
+> file — they take the next free IDs per the numbering rule above and run here in document order.
+> T017–T022 built everything needed to *carry* a session but nothing that *issues* one:
+> `contracts/rest-api.md` required every endpoint to be authenticated and contracted no route to sign
+> in, so `CurrentUser` was unsatisfiable over HTTP and T058 was blocked.
+
+- [X] T177 Amend the API contract with the session endpoints in specs/001-reddit-audience-intelligence/contracts/rest-api.md
+- [X] T178 [P] Write failing tests for the session endpoints in backend/tests/integration/test_auth_routes.py
+- [X] T179 Implement the client-keyed rate limiter for unauthenticated endpoints in backend/app/common/limits.py
+- [X] T180 Implement the sign-in, sign-out, and current-session routes in backend/app/users/router.py
 
 ### Reddit data layer (Constitution I)
 
