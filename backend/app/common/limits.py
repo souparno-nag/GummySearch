@@ -11,6 +11,12 @@ omits the check must not be able to exceed them." So nothing here advises a clie
 limiter refuses, from a FastAPI dependency that runs before the route body, and a caller
 that never reads a header is bound by it exactly as much as one that does.
 
+Counters live only in Redis. The constitution's Technology and Data Constraints section
+names rate-limit windows as ephemeral operational state, exempt from the rule that no
+durable data may exist only in Redis — a lost counter is refilled by the next request in its
+window, and persisting one would put a write on the system of record in front of every
+request this guards.
+
 This module covers **request rate**. The **spend ceiling** half of FR-080 is a different
 control with a different unit — money rather than requests — and lands with `app/ops/`
 (T031). Both exist because they fail differently: a rate limit protects the service from

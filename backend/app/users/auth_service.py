@@ -23,10 +23,11 @@ Three properties are worth stating outright:
   sessions accumulating; this module decides whether a session is valid.
 
 Sessions live in Redis because it provides expiry and invalidation natively, which are the
-two properties FR-079 requires. This is a deliberate reading of the constitution's rule
-that no data may exist only in Redis: that rule protects the collected corpus, which cannot
-be re-fetched, whereas losing every session costs exactly one sign-in. The reasoning is
-recorded in `docs/tasks/T019.md` so it can be disagreed with knowingly.
+two properties FR-079 requires. The constitution's Technology and Data Constraints section
+names session entries as ephemeral operational state, exempt from the rule that no durable
+data may exist only in Redis: that rule protects the collected corpus, which cannot be
+re-fetched, whereas losing every session costs exactly one sign-in. The reasoning behind
+the exemption is recorded in `docs/tasks/T020.md`.
 
 External systems touched: Redis.
 """
