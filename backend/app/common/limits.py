@@ -29,7 +29,7 @@ import time
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, params
+from fastapi import Depends, Request, params
 from redis.asyncio import Redis
 
 from app.common.exceptions import RateLimitedError
@@ -40,6 +40,10 @@ from app.dependencies import CurrentUser
 # Namespaced so counters are never confused with sessions, cached Reddit listings, or
 # anything else sharing this Redis.
 RATE_LIMIT_KEY_PREFIX = "ratelimit:"
+
+# Sign-in has its own bucket so exhausting it cannot lock a signed-in caller out of anything
+# else, and so a flood of sign-in attempts is visible as itself.
+SIGNIN_BUCKET = "signin"
 
 
 @dataclass(frozen=True)
@@ -125,6 +129,54 @@ def rate_limit(bucket: str, *, requests: int, window_seconds: int) -> params.Dep
             subject=user.username,
             requests=requests,
             window_seconds=window_seconds,
+        )
+
+    return Depends(enforce)
+
+
+def signin_rate_limit() -> params.Depends:
+    """Return a dependency bounding sign-in attempts, keyed on the calling client.
+
+    `rate_limit` above keys on `CurrentUser`, which makes it structurally unusable on the one
+    endpoint that needs it most: at sign-in, establishing that user is the point. This keys on
+    the calling client's address instead, and shares `consume_rate_limit` unchanged so there
+    is one counting implementation rather than two.
+
+    Attempts are counted whatever their outcome, because the dependency runs before the route
+    body. A limiter that counted only failures would be evaded by a caller who does not read
+    the response, which is exactly the client FR-080 says the control must still bind.
+
+    The subject is `request.client.host`, deliberately **not** `X-Forwarded-For`. That header
+    is set by the client, so trusting it would let a caller mint a fresh subject per attempt
+    and walk straight through this limit. Behind a reverse proxy that means every caller keys
+    to the proxy — a deployment concern FR-081 defers, not a reason to trust a spoofable
+    header now.
+
+    The allowance is read from configuration **per request** rather than captured when the
+    route is declared, so it can be changed without a code change (FR-080's reasoning: a
+    control that needs a rebuild to adjust is one an operator eventually works around).
+
+    FR-081 excludes *network-level* brute-force protection from this release. This is an
+    application-level control costing one Redis `INCR`, and FR-079 forbids leaning on the
+    loopback bind, so it stays.
+
+    External systems touched: Redis, when the returned dependency runs.
+    """
+
+    async def enforce(
+        request: Request,
+        redis: Annotated[Redis, Depends(get_redis)],
+    ) -> Allowance:
+        # A missing `client` happens on ASGI transports that report no peer. Falling back to
+        # a constant shares one allowance between such callers, which errs toward refusing
+        # rather than toward an unbounded endpoint.
+        subject = request.client.host if request.client else "unknown"
+        return await consume_rate_limit(
+            redis,
+            bucket=SIGNIN_BUCKET,
+            subject=subject,
+            requests=settings.signin_rate_limit_requests,
+            window_seconds=settings.signin_rate_limit_window_seconds,
         )
 
     return Depends(enforce)

@@ -62,6 +62,15 @@ class Settings(BaseSettings):
     rate_limit_requests: int = Field(default=60, alias="RATE_LIMIT_REQUESTS")
     rate_limit_window_seconds: int = Field(default=60, alias="RATE_LIMIT_WINDOW_SECONDS")
 
+    # Sign-in attempt allowance, kept separate from the paid-call defaults above because the
+    # profile is different: signing in costs nothing, but it is the one endpoint an
+    # unauthenticated caller can reach repeatedly. Ten attempts per five minutes is
+    # unremarkable for someone mistyping a password and useless for guessing one.
+    signin_rate_limit_requests: int = Field(default=10, alias="SIGNIN_RATE_LIMIT_REQUESTS")
+    signin_rate_limit_window_seconds: int = Field(
+        default=300, alias="SIGNIN_RATE_LIMIT_WINDOW_SECONDS"
+    )
+
     # The interface the application is expected to bind. Consulted by the same guard when
     # the server is started programmatically, i.e. with no uvicorn `--host` on the command
     # line to read. The default is what makes loopback-only the behaviour you get by doing

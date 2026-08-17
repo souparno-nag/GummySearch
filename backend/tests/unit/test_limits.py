@@ -18,9 +18,11 @@ import app.common.limits as limits
 from app.common.exceptions import RateLimitedError
 from app.common.limits import (
     RATE_LIMIT_KEY_PREFIX,
+    SIGNIN_BUCKET,
     consume_rate_limit,
     paid_call_rate_limit,
     rate_limit,
+    signin_rate_limit,
 )
 from app.common.middleware import install_error_handling
 from app.common.redis import get_redis
@@ -213,3 +215,93 @@ def test_an_unauthenticated_request_never_reaches_the_limited_endpoint(client):
     # The limiter is keyed on the caller, so authentication has to resolve first. This also
     # means an anonymous flood cannot consume the signed-in user's allowance.
     assert client.get("/costly").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# The client-keyed variant, for endpoints with no signed-in caller
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def open_client(fake_redis, monkeypatch):
+    """An app with one unauthenticated endpoint behind the sign-in limiter."""
+    monkeypatch.setattr(limits.settings, "signin_rate_limit_requests", 2)
+    monkeypatch.setattr(limits.settings, "signin_rate_limit_window_seconds", WINDOW)
+
+    built = FastAPI()
+    install_error_handling(built)
+
+    @built.post("/open", dependencies=[signin_rate_limit()])
+    async def open_endpoint() -> dict[str, bool]:
+        return {"ok": True}
+
+    built.dependency_overrides[get_redis] = lambda: fake_redis
+    return TestClient(built)
+
+
+def test_an_unauthenticated_endpoint_serves_until_its_limit_is_reached(open_client):
+    # No session, no cookie: this is the case `rate_limit` structurally cannot cover, since
+    # it resolves CurrentUser before counting.
+    assert open_client.post("/open").status_code == 200
+    assert open_client.post("/open").status_code == 200
+
+
+def test_an_unauthenticated_endpoint_refuses_once_its_limit_is_reached(open_client):
+    open_client.post("/open")
+    open_client.post("/open")
+
+    response = open_client.post("/open")
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "rate_limited"
+
+
+async def test_the_client_keyed_limit_counts_against_the_calling_address(open_client, fake_redis):
+    open_client.post("/open")
+
+    keys = [
+        k async for k in fake_redis.scan_iter(match=f"{RATE_LIMIT_KEY_PREFIX}{SIGNIN_BUCKET}:*")
+    ]
+
+    # Keyed on the caller's address, not on a username that does not exist yet.
+    assert len(keys) == 1
+    assert "testclient" in keys[0]
+
+
+def test_the_client_keyed_limit_ignores_a_forwarded_for_header(open_client):
+    # The header is client-controlled. Honouring it would let a caller mint a fresh subject
+    # per attempt and walk straight through the limit.
+    for index in range(2):
+        assert (
+            open_client.post("/open", headers={"X-Forwarded-For": f"10.0.0.{index}"}).status_code
+            == 200
+        )
+
+    refused = open_client.post("/open", headers={"X-Forwarded-For": "10.0.0.99"})
+
+    assert refused.status_code == 429
+
+
+def test_the_sign_in_allowance_comes_from_configuration(open_client, monkeypatch):
+    # Read per request rather than captured when the route was declared, so raising the
+    # allowance does not need the app rebuilt.
+    open_client.post("/open")
+    open_client.post("/open")
+    assert open_client.post("/open").status_code == 429
+
+    monkeypatch.setattr(limits.settings, "signin_rate_limit_requests", 10)
+
+    assert open_client.post("/open").status_code == 200
+
+
+async def test_sign_in_counters_do_not_share_a_bucket_with_paid_calls(open_client, fake_redis):
+    # Exhausting sign-in attempts must not also refuse a signed-in caller's Ask allowance.
+    open_client.post("/open")
+    await consume(fake_redis, bucket="ask")
+
+    signin = [
+        k async for k in fake_redis.scan_iter(match=f"{RATE_LIMIT_KEY_PREFIX}{SIGNIN_BUCKET}:*")
+    ]
+    ask = [k async for k in fake_redis.scan_iter(match=f"{RATE_LIMIT_KEY_PREFIX}ask:*")]
+
+    assert not set(signin) & set(ask)
