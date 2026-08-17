@@ -75,6 +75,17 @@ Web application per plan.md: `backend/app/`, `backend/workers/`, `backend/tests/
 - [X] T021 Implement the current_user dependency in backend/app/dependencies.py
 - [X] T022 Implement server-side rate limiting applied to every paid-call endpoint in backend/app/common/limits.py
 
+> **T022a–T022d were added after T022 shipped.** T017–T022 built everything needed to *carry* a session
+> but nothing that *issues* one: `contracts/rest-api.md` required every endpoint to be authenticated and
+> contracted no route to sign in, so `CurrentUser` was unsatisfiable over HTTP and T058 was blocked.
+> Lettered rather than renumbered, because inserting a task here would renumber T023–T160 and every
+> reference to them in this file.
+
+- [X] T022a Amend the API contract with the session endpoints in specs/001-reddit-audience-intelligence/contracts/rest-api.md
+- [ ] T022b [P] Write failing tests for the session endpoints in backend/tests/integration/test_auth_routes.py
+- [ ] T022c Implement the client-keyed rate limiter for unauthenticated endpoints in backend/app/common/limits.py
+- [ ] T022d Implement the sign-in, sign-out, and current-session routes in backend/app/users/router.py
+
 ### Reddit data layer (Constitution I)
 
 - [ ] T023 [P] Write failing tests for rate limiting, retry, and quota accounting in backend/tests/unit/test_reddit_client.py
